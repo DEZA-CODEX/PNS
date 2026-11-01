@@ -24,3 +24,11 @@ export function requireText(value: unknown, field: string) {
   }
   return value.trim();
 }
+
+/** Validate a password without trimming or otherwise changing user input. */
+export function requirePassword(value: unknown, field = "Password") {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new AdminAuthError("validation", `${field} is required.`, 400);
+  }
+  return value;
+}

@@ -5,7 +5,7 @@ import {
   getAdminDb,
   writeAuditEvent,
 } from "@/lib/admin-auth";
-import { adminErrorResponse, requireText } from "@/lib/admin-api";
+import { adminErrorResponse, requirePassword, requireText } from "@/lib/admin-api";
 
 export const runtime = "nodejs";
 
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     };
     const email = requireText(body.email, "Email").toLowerCase();
     const displayName = requireText(body.displayName, "Display name");
-    const password = requireText(body.password, "Password");
+    const password = requirePassword(body.password);
     if (body.groupIds !== undefined) {
       if (!context.permissions.has("groups.members.manage"))
         throw new AdminAuthError(

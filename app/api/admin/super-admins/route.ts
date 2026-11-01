@@ -1,5 +1,5 @@
 import { AdminAuthError, getAdminDb, hashPassword, requirePermission, writeAuditEvent } from "@/lib/admin-auth";
-import { adminErrorResponse, requireText } from "@/lib/admin-api";
+import { adminErrorResponse, requirePassword, requireText } from "@/lib/admin-api";
 
 export const runtime = "nodejs";
 
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
       throw new AdminAuthError("validation", "Please enter a valid email address.", 400);
     }
 
-    const password = requireText(body.password, "Password");
+    const password = requirePassword(body.password);
     if (password.length < 8) {
       throw new AdminAuthError("validation", "Password must be at least 8 characters.", 400);
     }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { AdminPermission, AdminUser } from "@/lib/admin-auth";
+import { PasswordInput } from "@/admin/auth/components/PasswordInput";
 
 const permissionOptions: Array<{ key: AdminPermission; label: string; area: string }> = [
   { key: "room_images.read", label: "Read room images", area: "Room images" },
@@ -44,6 +45,8 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
   const [newUser, setNewUser] = useState({ displayName: "", email: "", password: "" });
   const [newGroup, setNewGroup] = useState({ name: "", description: "" });
   const [newSuperAdmin, setNewSuperAdmin] = useState({ email: "", password: "" });
+  const [passwordUser, setPasswordUser] = useState<AdminUser | null>(null);
+  const [passwordForm, setPasswordForm] = useState({ password: "", confirmPassword: "" });
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -201,6 +204,48 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
     }
   };
 
+  const editPassword = (user: AdminUser) => {
+    setPasswordUser(user);
+    setPasswordForm({ password: "", confirmPassword: "" });
+    setError(null);
+    setMessage(null);
+  };
+
+  const savePassword = async () => {
+    if (!passwordUser || !isSuperAdmin) return;
+    if (!passwordForm.password) {
+      setError("A new password is required.");
+      return;
+    }
+    if (passwordForm.password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (passwordForm.password !== passwordForm.confirmPassword) {
+      setError("Password confirmation does not match.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/users/${passwordUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: passwordForm.password }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message ?? "Password could not be updated.");
+      setPasswordUser(null);
+      setPasswordForm({ password: "", confirmPassword: "" });
+      setMessage("Password updated. The new password is active immediately.");
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "Password could not be updated.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <section className="space-y-6" aria-labelledby="admin-access-title">
       <div>
@@ -262,11 +307,11 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
                 className="rounded-lg border border-[var(--color-border-warm)] px-3 py-2"
               />
               <input
-                aria-label="Temporary password"
+                aria-label="Permanent password"
                 type="password"
                 value={newUser.password}
                 onChange={(event) => setNewUser({ ...newUser, password: event.target.value })}
-                placeholder="Temporary password"
+                placeholder="Permanent password"
                 className="rounded-lg border border-[var(--color-border-warm)] px-3 py-2"
               />
               <button
@@ -302,8 +347,83 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
                     {user.status === "active" ? "Disable" : "Enable"}
                   </button>
                 ) : null}
+                {isSuperAdmin ? (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => editPassword(user)}
+                    className="rounded-lg border border-[var(--color-border-warm)] px-3 py-2 text-xs text-[#051838] disabled:opacity-50"
+                  >
+                    Edit password
+                  </button>
+                ) : null}
               </div>
             ))}
+          </div>
+        </div>
+      ) : null}
+
+      {passwordUser ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-[#051838]/60 p-4 backdrop-blur-sm"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !saving) setPasswordUser(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-password-title"
+            className="w-full max-w-lg rounded-2xl border border-[var(--color-border-warm)] bg-white p-6 shadow-2xl"
+          >
+            <p className="text-xs uppercase tracking-[0.16em] text-[var(--color-gold)]">
+              Super Admin action
+            </p>
+            <h3 id="edit-password-title" className="mt-2 text-2xl font-semibold text-[#051838]">
+              Edit password
+            </h3>
+            <p className="mt-2 text-sm text-[#46536b]">
+              Set a new permanent password for {passwordUser.email}. The existing password cannot be recovered.
+            </p>
+            <div className="mt-5 grid gap-4">
+              <PasswordInput
+                label="New password"
+                autoComplete="new-password"
+                value={passwordForm.password}
+                onChange={(event) =>
+                  setPasswordForm({ ...passwordForm, password: event.target.value })
+                }
+                disabled={saving}
+              />
+              <PasswordInput
+                label="Confirm new password"
+                autoComplete="new-password"
+                value={passwordForm.confirmPassword}
+                onChange={(event) =>
+                  setPasswordForm({ ...passwordForm, confirmPassword: event.target.value })
+                }
+                disabled={saving}
+              />
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => setPasswordUser(null)}
+                className="rounded-lg border border-[var(--color-border-warm)] px-4 py-2 text-sm text-[#051838] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void savePassword()}
+                className="luxury-button px-4 py-2 text-xs uppercase disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save password"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

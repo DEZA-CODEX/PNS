@@ -1,5 +1,12 @@
-import { getAdminDb, hashPassword, requirePermission, writeAuditEvent } from "@/lib/admin-auth";
-import { adminErrorResponse, requireText } from "@/lib/admin-api";
+import {
+  AdminAuthError,
+  getAdminDb,
+  hashPassword,
+  invalidateAdminSessions,
+  requirePermission,
+  writeAuditEvent,
+} from "@/lib/admin-auth";
+import { adminErrorResponse, requirePassword, requireText } from "@/lib/admin-api";
 
 export const runtime = "nodejs";
 
@@ -100,8 +107,16 @@ export async function PATCH(request: Request, context: { params: Promise<{ userI
     const patch: Record<string, unknown> = {};
     if (body.displayName !== undefined)
       patch["display_name"] = requireText(body.displayName, "Display name");
-    if (body.password !== undefined)
-      patch["password_hash"] = await hashPassword(requireText(body.password, "Password"));
+    if (body.password !== undefined) {
+      if (actor.user.roleName !== "Super Admin") {
+        throw new AdminAuthError(
+          "forbidden",
+          "Only a Super Admin may change user passwords.",
+          403,
+        );
+      }
+      patch["password_hash"] = await hashPassword(requirePassword(body.password));
+    }
     if (body.status !== undefined) patch["status"] = body.status;
     if (!Object.keys(patch).length) throw new Error("No permitted fields were supplied.");
     const { data: user, error } = await db
@@ -113,8 +128,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ userI
       )
       .single();
     if (error) throw error;
+    if (body.password !== undefined) await invalidateAdminSessions(userId, request);
     await writeAuditEvent(actor.user.id, "users.update", "user", userId, "success", requestId, {
-      fields: Object.keys(patch),
+      fields: Object.keys(patch).map((field) => (field === "password_hash" ? "password" : field)),
     });
     return Response.json({ success: true, user, requestId });
   } catch (error) {

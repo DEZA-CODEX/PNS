@@ -471,28 +471,54 @@ export async function authenticateAdmin(email: string, password: string, remembe
   }
   const db = getAdminDb();
   const superAdmin = await findSuperAdminByEmail(db, normalizedEmail);
+  if (superAdmin) {
+    if (
+      !superAdmin.is_active ||
+      !(await verifyPassword(password, superAdmin.password_hash))
+    ) {
+      await writeAuditEvent(
+        null,
+        "auth.login",
+        "user",
+        String(superAdmin.id),
+        "denied",
+      );
+      throw new AdminAuthError("invalid_credentials", "Invalid email or password.", 401);
+    }
+
+    const adminUser = await ensureSuperAdminUserRecord(db, superAdmin);
+    const user = rowToUser(adminUser);
+    const token = await createAdminSession(user.id, remember);
+    await db
+      .from("super_admins")
+      .update({ last_login_at: new Date().toISOString() })
+      .eq("id", superAdmin.id);
+    await db
+      .from("admin_users")
+      .update({ last_login_at: new Date().toISOString() })
+      .eq("id", user.id);
+    await writeAuditEvent(user.id, "auth.login", "user", user.id, "success");
+    return { token, user };
+  }
+
+  const rawUser = await findUserByEmail(db, normalizedEmail);
   if (
-    !superAdmin ||
-    !superAdmin.is_active ||
-    !(await verifyPassword(password, superAdmin.password_hash))
+    !rawUser ||
+    rawUser["status"] !== "active" ||
+    !(await verifyPassword(password, rawUser.password_hash))
   ) {
     await writeAuditEvent(
       null,
       "auth.login",
       "user",
-      superAdmin ? String(superAdmin.id) : null,
+      rawUser ? String(rawUser["id"]) : null,
       "denied",
     );
     throw new AdminAuthError("invalid_credentials", "Invalid email or password.", 401);
   }
 
-  const adminUser = await ensureSuperAdminUserRecord(db, superAdmin);
-  const user = rowToUser(adminUser);
+  const user = rowToUser(rawUser);
   const token = await createAdminSession(user.id, remember);
-  await db
-    .from("super_admins")
-    .update({ last_login_at: new Date().toISOString() })
-    .eq("id", superAdmin.id);
   await db
     .from("admin_users")
     .update({ last_login_at: new Date().toISOString() })
@@ -588,6 +614,26 @@ export async function destroyAdminSession(request: Request) {
     .from("admin_sessions")
     .delete()
     .eq("token_hash", hashSessionToken(token));
+  if (error) throw error;
+}
+
+export async function invalidateAdminSessions(userId: string, request?: Request) {
+  const currentToken = request ? parseCookieHeader(request.headers.get("cookie")) : null;
+  const currentTokenHash = currentToken ? hashSessionToken(currentToken) : null;
+
+  if (!hasSupabaseConfig()) {
+    const store = await readLocalAdminStore();
+    store.sessions = store.sessions.filter(
+      (entry) =>
+        entry.user_id !== userId || (currentTokenHash !== null && entry.token_hash === currentTokenHash),
+    );
+    await writeLocalAdminStore(store);
+    return;
+  }
+
+  let query = getAdminDb().from("admin_sessions").delete().eq("user_id", userId);
+  if (currentTokenHash) query = query.neq("token_hash", currentTokenHash);
+  const { error } = await query;
   if (error) throw error;
 }
 
