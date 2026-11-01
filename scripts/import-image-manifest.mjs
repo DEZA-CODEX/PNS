@@ -61,47 +61,96 @@ async function importLegacyAuthData(client) {
       updated_at: user.updated_at ?? user.created_at ?? new Date().toISOString(),
     }));
 
-    const { error: userError } = await client.from("admin_users").upsert(userRows, {
-      onConflict: "id",
-      ignoreDuplicates: false,
-    });
-    if (userError) throw userError;
-  }
+    const { data: existingUsers, error: existingUsersError } = await client
+      .from("admin_users")
+      .select("id,email");
+    if (existingUsersError) throw existingUsersError;
+    const existingUserMap = new Map((existingUsers ?? []).map((row) => [row.email, row.id]));
+    const legacyUserLookup = new Map(users.map((user) => [user.email, user.id]));
+    const userRowsToInsert = userRows.filter((row) => !existingUserMap.has(row.email));
 
-  if (sessions.length) {
-    const sessionRows = sessions.map((session) => ({
-      id: session.id,
-      user_id: session.user_id,
-      token_hash: session.token_hash,
-      expires_at: session.expires_at,
-      created_at: session.created_at ?? new Date().toISOString(),
-    }));
+    if (userRowsToInsert.length) {
+      const { data: insertedUsers, error: userError } = await client
+        .from("admin_users")
+        .insert(userRowsToInsert)
+        .select("id,email");
+      if (userError) throw userError;
+      for (const row of insertedUsers ?? []) existingUserMap.set(row.email, row.id);
+    }
 
-    const { error: sessionError } = await client.from("admin_sessions").upsert(sessionRows, {
-      onConflict: "id",
-      ignoreDuplicates: false,
-    });
-    if (sessionError) throw sessionError;
-  }
+    for (const [email, legacyId] of legacyUserLookup.entries()) {
+      const realId = existingUserMap.get(email);
+      if (realId) {
+        legacyUserLookup.set(email, realId);
+      }
+    }
 
-  if (auditEvents.length) {
-    const auditRows = auditEvents.map((event) => ({
-      id: event.id,
-      actor_user_id: event.actor_user_id ?? null,
-      action: event.action,
-      target_type: event.target_type ?? null,
-      target_id: event.target_id ?? null,
-      outcome: event.outcome,
-      request_id: event.request_id ?? null,
-      metadata: event.metadata ?? {},
-      created_at: event.created_at ?? new Date().toISOString(),
-    }));
+    const validUserIds = new Set((existingUsers ?? []).map((row) => row.id));
+    for (const row of users) {
+      const mappedId = existingUserMap.get(row.email);
+      if (mappedId) validUserIds.add(mappedId);
+    }
 
-    const { error: auditError } = await client.from("admin_audit_events").upsert(auditRows, {
-      onConflict: "id",
-      ignoreDuplicates: false,
-    });
-    if (auditError) throw auditError;
+    if (sessions.length) {
+      const sessionRows = sessions
+        .map((session) => {
+          const owner = users.find((user) => user.id === session.user_id);
+          const mappedUserId = owner ? existingUserMap.get(owner.email) ?? session.user_id : session.user_id;
+          return {
+            id: session.id,
+            user_id: mappedUserId,
+            token_hash: session.token_hash,
+            expires_at: session.expires_at,
+            created_at: session.created_at ?? new Date().toISOString(),
+          };
+        })
+        .filter((row) => validUserIds.has(row.user_id));
+
+      const { data: existingSessions, error: existingSessionsError } = await client
+        .from("admin_sessions")
+        .select("token_hash");
+      if (existingSessionsError) throw existingSessionsError;
+      const seenSessionHashes = new Set((existingSessions ?? []).map((row) => row.token_hash));
+      const newSessionRows = sessionRows.filter((row) => !seenSessionHashes.has(row.token_hash));
+      if (newSessionRows.length) {
+        const { error: sessionError } = await client.from("admin_sessions").insert(newSessionRows);
+        if (sessionError) throw sessionError;
+      }
+    }
+
+    if (auditEvents.length) {
+      const auditRows = auditEvents
+        .map((event) => {
+          const actorUserId = event.actor_user_id
+            ? users.find((user) => user.id === event.actor_user_id)?.email
+              ? existingUserMap.get(users.find((user) => user.id === event.actor_user_id)?.email ?? "") ?? null
+              : null
+            : null;
+          return {
+            id: event.id,
+            actor_user_id: actorUserId,
+            action: event.action,
+            target_type: event.target_type ?? null,
+            target_id: event.target_id ?? null,
+            outcome: event.outcome,
+            request_id: event.request_id ?? null,
+            metadata: event.metadata ?? {},
+            created_at: event.created_at ?? new Date().toISOString(),
+          };
+        })
+        .filter((row) => row.actor_user_id === null || validUserIds.has(row.actor_user_id));
+
+      const { data: existingAudit, error: existingAuditError } = await client
+        .from("admin_audit_events")
+        .select("id");
+      if (existingAuditError) throw existingAuditError;
+      const seenAuditIds = new Set((existingAudit ?? []).map((row) => row.id));
+      const newAuditRows = auditRows.filter((row) => !seenAuditIds.has(row.id));
+      if (newAuditRows.length) {
+        const { error: auditError } = await client.from("admin_audit_events").insert(newAuditRows);
+        if (auditError) throw auditError;
+      }
+    }
   }
 
   console.log(
@@ -155,11 +204,16 @@ async function importLegacyImageManifest(client) {
     };
   });
 
-  const { error: configError } = await client.from("image_manifest_config").upsert(configRows, {
-    onConflict: "config_key",
-    ignoreDuplicates: false,
-  });
-  if (configError) throw configError;
+  const { data: existingConfigRows, error: existingConfigError } = await client
+    .from("image_manifest_config")
+    .select("config_key");
+  if (existingConfigError) throw existingConfigError;
+  const existingConfigKeys = new Set((existingConfigRows ?? []).map((row) => row.config_key));
+  const newConfigRows = configRows.filter((row) => !existingConfigKeys.has(row.config_key));
+  if (newConfigRows.length) {
+    const { error: configError } = await client.from("image_manifest_config").insert(newConfigRows);
+    if (configError) throw configError;
+  }
 
   const managedImageRows = entries
     .filter((image) => image && typeof image === "object")
@@ -189,11 +243,22 @@ async function importLegacyImageManifest(client) {
     .filter((row) => row.legacy_id != null);
 
   if (managedImageRows.length) {
-    const { error: managedError } = await client.from("managed_images").upsert(managedImageRows, {
-      onConflict: "legacy_id",
-      ignoreDuplicates: false,
-    });
-    if (managedError) throw managedError;
+    const { data: existingManagedRows, error: existingManagedError } = await client
+      .from("managed_images")
+      .select("legacy_id");
+    if (existingManagedError) throw existingManagedError;
+    const existingLegacyIds = new Set(
+      (existingManagedRows ?? [])
+        .filter((row) => row.legacy_id != null)
+        .map((row) => row.legacy_id),
+    );
+    const newManagedImageRows = managedImageRows.filter(
+      (row) => row.legacy_id == null || !existingLegacyIds.has(row.legacy_id),
+    );
+    if (newManagedImageRows.length) {
+      const { error: managedError } = await client.from("managed_images").insert(newManagedImageRows);
+      if (managedError) throw managedError;
+    }
   }
 
   console.log(

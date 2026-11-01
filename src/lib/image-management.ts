@@ -97,6 +97,34 @@ async function writeManifest(manifest: ImageManifest) {
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 }
 
+async function syncManifestBackup(image: StoredImage & { active?: boolean; displayOrder?: number }) {
+  const customManifestPath = process.env["PNS_IMAGE_MANIFEST"];
+  if (!customManifestPath) return;
+  const file = path.resolve(customManifestPath);
+  const existing = await readManifest();
+  const sanitized: StoredImage = {
+    id: image.id,
+    category: image.category,
+    url: image.url,
+    path: image.path,
+    sourceType: image.sourceType,
+    filename: image.filename,
+    displayLocation: image.displayLocation ?? "gallery",
+    displayOrder: image.displayOrder ?? 0,
+    active: image.active ?? true,
+    deleted: false,
+  };
+  const manifest = existing;
+  const index = manifest.images.findIndex((candidate) => candidate.id === sanitized.id);
+  if (index >= 0) {
+    manifest.images[index] = { ...manifest.images[index], ...sanitized };
+  } else {
+    manifest.images.push(sanitized);
+  }
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+}
+
 function visibleImages(collection: ImageCollection, category: string, manifest: ImageManifest) {
   const deleted = new Set(
     manifest.images.filter((image) => image.deleted).map((image) => image.id),
@@ -136,8 +164,10 @@ export async function listManagedImages(
         .filter((image) => image.sourceType === "bundled" && !image.active)
         .map((image) => image.id),
     );
-    const bundled = staticImages(collection).filter((image) => !deletedBundledIds.has(image.id));
-    return [...bundled, ...databaseImages.filter((image) => image.active)];
+    const bundled = staticImages(collection)
+      .filter((image) => image.category === category)
+      .filter((image) => !deletedBundledIds.has(image.id));
+    return [...bundled, ...databaseImages.filter((image) => image.active && image.category === category)];
   }
   const manifest = await readManifest();
   return visibleImages(collection, category, manifest);
@@ -172,7 +202,7 @@ export async function addExternalImage(
     );
   }
   if (usesDatabaseImageStore()) {
-    return saveDatabaseImage({
+    const saved = await saveDatabaseImage({
       collection,
       category,
       url: parsed.toString(),
@@ -180,6 +210,18 @@ export async function addExternalImage(
       sourceType: "external",
       createdBy,
     });
+    await syncManifestBackup({
+      ...saved,
+      id: saved.id,
+      sourceType: "external",
+      category,
+      filename: saved.filename ?? null,
+      displayLocation: saved.displayLocation ?? "gallery",
+      displayOrder: saved.displayOrder ?? 0,
+      active: saved.active ?? true,
+      deleted: false,
+    });
+    return saved;
   }
   const image: StoredImage = {
     id: `${collection}:external:${randomUUID()}`,
@@ -222,7 +264,18 @@ export async function addUploadedImage(
 
     if (usesDatabaseImageStore()) {
       try {
-        return await saveDatabaseImage({ ...image, collection, category, createdBy });
+        const saved = await saveDatabaseImage({ ...image, collection, category, createdBy });
+        await syncManifestBackup({
+          ...saved,
+          sourceType: "upload",
+          category,
+          filename: saved.filename ?? image.filename ?? converted.storedName,
+          displayLocation: saved.displayLocation ?? "gallery",
+          displayOrder: saved.displayOrder ?? 0,
+          active: saved.active ?? true,
+          deleted: false,
+        });
+        return saved;
       } catch (error) {
         await unlink(path.resolve(defaultStorageRoot, converted.path.replace(/^uploads\//u, ""))).catch(
           () => undefined,
@@ -320,6 +373,16 @@ export async function addUploadedImages(
       try {
         if (usesDatabaseImageStore()) {
           const saved = await saveDatabaseImage({ ...image, collection, category, createdBy });
+          await syncManifestBackup({
+            ...saved,
+            sourceType: "upload",
+            category,
+            filename: saved.filename ?? image.filename ?? file.storedName,
+            displayLocation: saved.displayLocation ?? "gallery",
+            displayOrder: saved.displayOrder ?? 0,
+            active: saved.active ?? true,
+            deleted: false,
+          });
           return {
             originalName: file.originalName,
             storedName: saved.filename ?? file.storedName,

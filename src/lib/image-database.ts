@@ -17,10 +17,8 @@ async function storageFileExists(relativePath: string | null) {
 
 export function usesDatabaseImageStore() {
   const backend = process.env["PNS_IMAGE_BACKEND"];
-  return (
-    (backend === "supabase" || (process.env["NODE_ENV"] === "production" && backend !== "file")) &&
-    hasSupabaseConfig()
-  );
+  if (backend === "file") return false;
+  return hasSupabaseConfig();
 }
 
 export async function listDatabaseImages(
@@ -65,6 +63,13 @@ export async function listDatabaseImages(
   });
 }
 
+function normalizeUuidLike(value: string | null | undefined) {
+  if (!value) return null;
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(value)
+    ? value
+    : null;
+}
+
 export async function saveDatabaseImage(input: {
   collection: ImageCollection;
   category: string;
@@ -84,7 +89,7 @@ export async function saveDatabaseImage(input: {
       storage_path: input.path,
       source_type: input.sourceType,
       display_location: input.displayLocation ?? "gallery",
-      created_by: input.createdBy ?? null,
+      created_by: normalizeUuidLike(input.createdBy),
       legacy_id: input.legacyId ?? null,
     })
     .select(
@@ -116,6 +121,7 @@ export async function disableDatabaseImage(
     .eq("id", id)
     .eq("category_type", collection)
     .eq("category_id", category)
+    .eq("is_active", true)
     .select("id,storage_path,source_type")
     .maybeSingle();
   if (error) throw error;

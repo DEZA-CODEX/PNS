@@ -8,8 +8,8 @@
     "build": "next build",
     "start": "next start",
     "bootstrap:superadmin": "node scripts/bootstrap-superadmin.mjs",
-    "import:image-manifest": "node scripts/import-image-manifest.mjs",
-    "import:legacy-data": "node scripts/import-image-manifest.mjs",
+    "import:image-manifest": "node --env-file=.env scripts/import-image-manifest.mjs",
+    "import:legacy-data": "node --env-file=.env scripts/import-image-manifest.mjs",
     "test:image-management": "node --test tests/image-management-smoke.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -92,3 +92,4 @@
     "typescript-eslint": "^8.56.1"
   }
 }
+
