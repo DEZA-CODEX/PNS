@@ -44,9 +44,10 @@ export function middleware(request: NextRequest) {
     const isAuthPath = AUTH_PATHS.has(pathname);
 
     if (isAuthPath) {
-      if (sessionCookie) {
-        return NextResponse.redirect(new URL("/admin", request.url));
-      }
+      // A cookie's presence is only an optimistic check. The actual session
+      // is validated by the server page/API, so stale or expired cookies must
+      // still be allowed to reach the login page. Redirecting based only on
+      // presence creates a loop: /admin -> /admin/login -> /admin.
       return NextResponse.next();
     }
 

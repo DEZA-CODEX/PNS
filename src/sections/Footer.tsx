@@ -7,6 +7,7 @@ const navigation = [
   ["About Us", "/about-us"],
   ["Rooms", "/rooms"],
   ["Dining", "/dining"],
+  ["Banquet", "/banquet"],
   ["Gallery", "/gallery"],
   ["Contact", "/contact"],
 ] as const;

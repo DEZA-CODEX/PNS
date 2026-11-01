@@ -10,6 +10,7 @@ const links = [
   { label: "About Us", href: "/about-us" },
   { label: "Rooms", href: "/rooms" },
   { label: "Dining", href: "/dining" },
+  { label: "Banquet", href: "/banquet" },
   { label: "Gallery", href: "/gallery" },
   { label: "Contact", href: "/contact" },
 ];
