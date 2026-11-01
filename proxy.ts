@@ -24,7 +24,7 @@ function hasLocalImageTestToken(request: NextRequest) {
   );
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isAdminPage = pathname === "/admin" || pathname.startsWith("/admin/");
   const isAdminApi = pathname === "/api/admin" || pathname.startsWith("/api/admin/");

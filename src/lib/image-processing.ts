@@ -45,6 +45,13 @@ export type ProcessUploadedImageOptions = {
   storageRoot?: string | null;
 };
 
+type ImageMetadata = {
+  width?: number | undefined;
+  height?: number | undefined;
+  pages?: number | undefined;
+  format?: string | undefined;
+};
+
 function normalizeBaseName(value: string) {
   const withoutExt = value.replace(/\.[^/.]+$/u, "");
   const cleaned = withoutExt
@@ -63,7 +70,7 @@ function ensureWithinStorageRoot(resolvedPath: string, rootPath: string) {
 }
 
 async function validateAndConvertImage(buffer: Buffer, fileName: string, mimeType?: string) {
-  let metadata: sharp.Metadata;
+  let metadata: ImageMetadata;
   let format: string | null = null;
 
   try {
@@ -72,7 +79,7 @@ async function validateAndConvertImage(buffer: Buffer, fileName: string, mimeTyp
   } catch {
     const supportedMime = mimeType ? mimeType.toLowerCase() : "";
     if (supportedImageMimeTypes.has(supportedMime) && buffer.length <= 1024 * 1024) {
-      metadata = { width: 1, height: 1, format: "webp" } as sharp.Metadata;
+      metadata = { width: 1, height: 1, format: "webp" };
       format = "webp";
     } else {
       throw new Error("unsupported_image_format");
