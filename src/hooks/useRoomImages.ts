@@ -26,9 +26,15 @@ export function useRoomImageLibrary() {
 
     load();
     const unsubscribe = roomImageRepository.subscribe(load);
+    const onManagedImagesChanged = (event: Event) => {
+      const collection = (event as CustomEvent<{ collection?: string }>).detail?.collection;
+      if (!collection || collection === "room") load();
+    };
+    window.addEventListener("pns-managed-images-changed", onManagedImagesChanged);
     return () => {
       mounted = false;
       unsubscribe();
+      window.removeEventListener("pns-managed-images-changed", onManagedImagesChanged);
     };
   }, []);
 

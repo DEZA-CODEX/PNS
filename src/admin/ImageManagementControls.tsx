@@ -20,6 +20,10 @@ type ImageManagementControlsProps = {
   categoryLabel: string;
 };
 
+function notifyManagedImagesChanged(collection: "room" | "dining") {
+  window.dispatchEvent(new CustomEvent("pns-managed-images-changed", { detail: { collection } }));
+}
+
 function safeImageSource(value: string) {
   if ((value.startsWith("/") && !value.startsWith("//")) || value.startsWith("blob:")) {
     return value;
@@ -122,11 +126,22 @@ export function ImageManagementControls({
           body: JSON.stringify({ category, imageUrl: url.trim() }),
         });
       }
-      const body = (await response.json()) as { error?: { message?: string } };
+      const body = (await response.json()) as {
+        error?: { message?: string };
+        image?: ManagedImageRecord;
+      };
       if (!response.ok) throw new Error(body.error?.message ?? "Image could not be added.");
       resetForm();
       setFeedback("Image saved on the server.");
-      await loadImages();
+      if (body.image) {
+        setImages((current) => [
+          ...current.filter((candidate) => candidate.id !== body.image!.id),
+          body.image!,
+        ]);
+      } else {
+        await loadImages();
+      }
+      notifyManagedImagesChanged(collection);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "Image could not be added.");
     } finally {
@@ -149,8 +164,9 @@ export function ImageManagementControls({
       );
       const body = (await response.json()) as { error?: { message?: string } };
       if (!response.ok) throw new Error(body.error?.message ?? "Image could not be deleted.");
+      setImages((current) => current.filter((candidate) => candidate.id !== image.id));
+      notifyManagedImagesChanged(collection);
       setFeedback("Image deleted.");
-      await loadImages();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "Image could not be deleted.");
     } finally {
@@ -167,11 +183,36 @@ export function ImageManagementControls({
         headers: { ...requestHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ categoryType: collection, displayLocation }),
       });
-      const body = (await response.json()) as { error?: { message?: string } };
+      const body = (await response.json()) as {
+        error?: { message?: string };
+        image?: {
+          id: string;
+          display_location?: string;
+          display_order?: number;
+          is_active?: boolean;
+        };
+      };
       if (!response.ok)
         throw new Error(body.error?.message ?? "Image placement could not be saved.");
+      if (body.image) {
+        setImages((current) =>
+          current.map((candidate) =>
+            candidate.id === image.id
+              ? (() => {
+                  const updated = { ...candidate };
+                  if (body.image!.display_location !== undefined)
+                    updated.displayLocation = body.image!.display_location;
+                  if (body.image!.display_order !== undefined)
+                    updated.displayOrder = body.image!.display_order;
+                  if (body.image!.is_active !== undefined) updated.active = body.image!.is_active;
+                  return updated;
+                })()
+              : candidate,
+          ),
+        );
+      }
+      notifyManagedImagesChanged(collection);
       setFeedback("Display location saved.");
-      await loadImages();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "Image placement could not be saved.");
     } finally {

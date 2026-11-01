@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AdminPermission, AdminUser } from "@/lib/admin-auth";
 import { PasswordInput } from "@/admin/auth/components/PasswordInput";
 
@@ -51,6 +51,7 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const loadVersion = useRef(0);
 
   const canReadUsers = permissions.includes("users.read");
   const canCreateUsers = permissions.includes("users.create");
@@ -61,6 +62,7 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
   const isSuperAdmin = currentUserRole === "Super Admin";
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     setError(null);
     const [usersResponse, groupsResponse] = await Promise.all([
       canReadUsers
@@ -71,12 +73,12 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
     if (usersResponse) {
       const body = await usersResponse.json();
       if (!usersResponse.ok) throw new Error(body.error?.message ?? "Users could not be loaded.");
-      setUsers(body.users ?? []);
+      if (version === loadVersion.current) setUsers(body.users ?? []);
     }
     if (groupsResponse) {
       const body = await groupsResponse.json();
       if (!groupsResponse.ok) throw new Error(body.error?.message ?? "Groups could not be loaded.");
-      setGroups(body.groups ?? []);
+      if (version === loadVersion.current) setGroups(body.groups ?? []);
     }
   }, [canReadGroups, canReadUsers, search]);
 
@@ -100,8 +102,14 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message ?? "User could not be created.");
       setNewUser({ displayName: "", email: "", password: "" });
+      if (body.user) {
+        setUsers((current) =>
+          current.some((user) => user.id === body.user.id)
+            ? current.map((user) => (user.id === body.user.id ? body.user : user))
+            : [...current, body.user],
+        );
+      }
       setMessage("User created.");
-      await load();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "User could not be created.");
     } finally {
@@ -121,8 +129,14 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message ?? "Group could not be created.");
       setNewGroup({ name: "", description: "" });
+      if (body.group) {
+        setGroups((current) =>
+          current.some((group) => group.id === body.group.id)
+            ? current.map((group) => (group.id === body.group.id ? { ...group, ...body.group } : group))
+            : [...current, body.group].sort((left, right) => left.name.localeCompare(right.name)),
+        );
+      }
       setMessage("Group created.");
-      await load();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "Group could not be created.");
     } finally {
@@ -154,34 +168,71 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
   };
 
   const savePermissions = async (group: Group, permissionKey: string, checked: boolean) => {
-    const current = new Map(
+    setSaving(true);
+    setError(null);
+    const permissionState = new Map(
       (group.permissions ?? []).map((item) => [item.permission?.permission_key, item.effect]),
     );
-    if (checked) current.set(permissionKey, "allow");
-    else current.delete(permissionKey);
-    const response = await fetch(`/api/admin/groups/${group.id}/permissions`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        permissions: [...current].map(([key, effect]) => ({ permissionKey: key, effect })),
-      }),
-    });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error?.message ?? "Permissions could not be saved.");
-    setMessage("Group permissions saved.");
-    await load();
+    if (checked) permissionState.set(permissionKey, "allow");
+    else permissionState.delete(permissionKey);
+    try {
+      const response = await fetch(`/api/admin/groups/${group.id}/permissions`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          permissions: [...permissionState].map(([key, effect]) => ({ permissionKey: key, effect })),
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message ?? "Permissions could not be saved.");
+      const savedPermissions = [...permissionState].filter(
+        (entry): entry is [string, "allow" | "deny"] => typeof entry[0] === "string",
+      );
+      setGroups((groupsState) =>
+        groupsState.map((candidate) =>
+          candidate.id === group.id
+            ? {
+                ...candidate,
+                permissions: savedPermissions.map(([savedKey, effect]) => ({
+                  effect,
+                  permission: { permission_key: savedKey },
+                })),
+              }
+            : candidate,
+        ),
+      );
+      setMessage("Group permissions saved.");
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "Permissions could not be saved.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const saveMembers = async (group: Group, userIds: string[]) => {
-    const response = await fetch(`/api/admin/groups/${group.id}/members`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userIds }),
-    });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error?.message ?? "Group members could not be saved.");
-    setMessage("Group members saved.");
-    await load();
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/groups/${group.id}/members`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userIds }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message ?? "Group members could not be saved.");
+      setGroups((current) =>
+        current.map((candidate) =>
+          candidate.id === group.id
+            ? { ...candidate, members: userIds.map((user_id) => ({ user_id })) }
+            : candidate,
+        ),
+      );
+      setMessage("Group members saved.");
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "Group members could not be saved.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const toggleUser = async (user: AdminUser) => {
@@ -195,8 +246,12 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message ?? "User status could not be updated.");
+      if (body.user) {
+        setUsers((current) =>
+          current.map((candidate) => (candidate.id === body.user.id ? body.user : candidate)),
+        );
+      }
       setMessage("User status saved.");
-      await load();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "User status could not be updated.");
     } finally {

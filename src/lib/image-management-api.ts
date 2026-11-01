@@ -64,7 +64,10 @@ export async function handleList(request: Request, routeCollection: string) {
       requestId,
     );
     console.info(`[image-management:${requestId}] ${collection} list ${category}`);
-    return Response.json({ success: true, requestId, category, images });
+    return Response.json(
+      { success: true, requestId, category, images },
+      { headers: { "Cache-Control": "no-store, max-age=0" } },
+    );
   } catch (error) {
     return errorResponse(error, requestId);
   }

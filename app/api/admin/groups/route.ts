@@ -14,7 +14,10 @@ export async function GET(request: Request) {
       )
       .order("name");
     if (error) throw error;
-    return Response.json({ success: true, groups: data ?? [], requestId });
+    return Response.json(
+      { success: true, groups: data ?? [], requestId },
+      { headers: { "Cache-Control": "no-store, max-age=0" } },
+    );
   } catch (error) {
     return adminErrorResponse(error, requestId);
   }

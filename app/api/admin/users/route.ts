@@ -38,12 +38,15 @@ export async function GET(request: Request) {
     if (search) query = query.or(`email.ilike.%${search}%,display_name.ilike.%${search}%`);
     const { data, error } = await query;
     if (error) throw error;
-    return Response.json({
-      success: true,
-      users: (data ?? []).map((row) => publicUser(row)),
-      requestId,
-      actor: context.user.id,
-    });
+    return Response.json(
+      {
+        success: true,
+        users: (data ?? []).map((row) => publicUser(row)),
+        requestId,
+        actor: context.user.id,
+      },
+      { headers: { "Cache-Control": "no-store, max-age=0" } },
+    );
   } catch (error) {
     return adminErrorResponse(error, requestId);
   }
