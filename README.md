@@ -73,6 +73,15 @@ Public pages include page-specific titles, descriptions, canonical URLs, Open Gr
 metadata. The root layout also emits Hotel structured data using the existing site name, address,
 and contact number. Admin URLs are marked `noindex` and excluded from the sitemap.
 
+Image uploads are centrally processed with `sharp` before being written to disk. Uploads are
+validated against the actual file content, converted to `.webp` when needed, and stored in the
+existing `uploads/<collection>/<category>/` structure without changing the public site layout.
+The legacy JSON files remain a migration source for the original app data, while the runtime source
+of truth for active uploaded records is the Supabase `managed_images` table and the
+`image_manifest_config` table used for destination metadata. Import the current backup values from
+`data/admin-auth-store.json` and `data/uploads/image-manifest.json` with
+`npm run import:legacy-data` (or `npm run import:image-manifest`) after applying the migration.
+
 Vercel should use its Next.js framework detection and the normal `npm run build` command. The
 custom `vercel.json` security headers remain in place; the old Vite SPA rewrite has been removed.
 Keep environment values in the deployment platform rather than committing private `.env` files.

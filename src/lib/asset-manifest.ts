@@ -22,9 +22,9 @@ import vajraScreenshot185155 from "@/assets/rooms/vajra/Screenshot 2026-10-15 18
 import vajraScreenshot185245 from "@/assets/rooms/vajra/Screenshot 2026-10-15 185245.png";
 import vajraScreenshot185305 from "@/assets/rooms/vajra/Screenshot 2026-10-15 185305.png";
 import vajraScreenshot185401 from "@/assets/rooms/vajra/Screenshot 2026-10-15 185401.png";
-import clinqDiningScreenshot from "@/assets/dining/clinq/Screenshot 2026-10-15 183436.png";
-import cloud9DiningScreenshot from "@/assets/dining/cloud9/Screenshot 2026-10-15 184825.png";
-import vrindavanDiningScreenshot from "@/assets/dining/vrindavan/Screenshot 2026-10-15 183710.png";
+import clinqDiningScreenshot from "@/assets/dining/clinq/Screenshot 2026-10-15 183436.webp";
+import cloud9DiningScreenshot from "@/assets/dining/cloud9/Screenshot 2026-10-15 184825.webp";
+import vrindavanDiningScreenshot from "@/assets/dining/vrindavan/Screenshot 2026-10-15 183710.webp";
 import heroContainerScreenshot183541 from "@/assets/hero-container-img/Screenshot 2026-10-15 183541.png";
 import heroContainerScreenshot183607 from "@/assets/hero-container-img/Screenshot 2026-10-15 183607.png";
 import heroContainerScreenshot183636 from "@/assets/hero-container-img/Screenshot 2026-10-15 183636.png";
@@ -38,7 +38,7 @@ import heroBackgroundScreenshot183636 from "@/assets/hero-bg/Screenshot 2026-10-
 import heroBackgroundScreenshot184654 from "@/assets/hero-bg/Screenshot 2026-10-15 184654.png";
 import heroBackgroundScreenshot184715 from "@/assets/hero-bg/Screenshot 2026-10-15 184715.png";
 import heroBackgroundHotel from "@/assets/hero-bg/hero-hotel.jpg";
-import heroBackgroundImagePng from "@/assets/hero-bg/image.png";
+import heroBackgroundImagePng from "@/assets/hero-bg/image.webp";
 import heroBackgroundImageWebp from "@/assets/hero-bg/image.webp";
 
 export const roomImageAssets: Record<string, string> = {

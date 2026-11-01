@@ -7,6 +7,7 @@ import {
 import {
   addExternalImage,
   addUploadedImage,
+  addUploadedImages,
   deleteManagedImage,
   ImageManagementError,
   isCollection,
@@ -82,10 +83,56 @@ export async function handleCreate(request: Request, routeCollection: string) {
     if (contentType.includes("multipart/form-data")) {
       const form = await request.formData();
       const category = String(form.get("category") ?? "").trim();
-      const file = form.get("file");
-      if (!(file instanceof File))
-        throw new ImageManagementError("missing_file", "Choose an image file.", 400);
-      image = await addUploadedImage(collection, category, file, authContext.user.id);
+      const fileEntries: File[] = [];
+      for (const entry of form.getAll("file")) {
+        if (entry instanceof File) fileEntries.push(entry);
+      }
+      for (const entry of form.getAll("files")) {
+        if (entry instanceof File) fileEntries.push(entry);
+      }
+      if (fileEntries.length === 0)
+        throw new ImageManagementError("missing_file", "Choose at least one image file.", 400);
+      if (fileEntries.length === 1) {
+        const singleFile = fileEntries[0];
+        if (!singleFile) {
+          throw new ImageManagementError("missing_file", "Choose at least one image file.", 400);
+        }
+        image = await addUploadedImage(collection, category, singleFile, authContext.user.id);
+      } else {
+        const batch = await addUploadedImages(
+          collection,
+          category,
+          fileEntries,
+          authContext.user.id,
+        );
+        const statusCode = batch.failed === 0 ? 201 : batch.processed > 0 ? 207 : 400;
+        console.info(
+          `[image-management:${requestId}] ${collection} batch create ${category} ${batch.processed}/${batch.total}`,
+        );
+        await writeAuditEvent(
+          authContext.user.id,
+          `${collection}_images.upload`,
+          collection,
+          category,
+          "success",
+          requestId,
+          { files: batch.total, success: batch.processed, converted: batch.converted, failed: batch.failed },
+        );
+        return Response.json(
+          {
+            success: batch.failed === 0,
+            requestId,
+            category,
+            total: batch.total,
+            processed: batch.processed,
+            converted: batch.converted,
+            alreadyWebp: batch.alreadyWebp,
+            failed: batch.failed,
+            files: batch.files,
+          },
+          { status: statusCode },
+        );
+      }
     } else {
       const body = (await request.json()) as { category?: unknown; imageUrl?: unknown };
       if (typeof body.category !== "string" || typeof body.imageUrl !== "string") {

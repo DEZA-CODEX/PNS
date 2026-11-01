@@ -32,6 +32,5 @@ out
 *.sln
 *.sw?
 .env
-public/uploads/
 .vercel
 .env*

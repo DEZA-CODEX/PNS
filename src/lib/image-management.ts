@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { diningImageAssets, roomImageAssets } from "@/lib/asset-manifest";
+import { processUploadedImageFile, processUploadedImagesBatch, maxUploadBytes } from "@/lib/image-processing";
 import { DINING_TYPES, ROOM_TYPES, type DiningType, type RoomType } from "@/types/roomImages";
 import {
   disableBundledImage,
@@ -33,8 +34,6 @@ const manifestPath = path.resolve(
   process.env["PNS_IMAGE_MANIFEST"] ?? "data/uploads/image-manifest.json",
 );
 const defaultStorageRoot = path.resolve(process.env["PNS_IMAGE_STORAGE_DIR"] ?? "public/uploads");
-const maxUploadBytes = 8 * 1024 * 1024;
-const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
 const categorySets: Record<ImageCollection, readonly string[]> = {
   room: ROOM_TYPES,
   dining: DINING_TYPES,
@@ -87,6 +86,8 @@ async function readManifest(): Promise<ImageManifest> {
     if (!Array.isArray(parsed.images)) return { version: 1, images: [] };
     return { version: 1, images: parsed.images };
   } catch {
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    await writeFile(manifestPath, `${JSON.stringify({ version: 1, images: [] }, null, 2)}\n`, "utf8");
     return { version: 1, images: [] };
   }
 }
@@ -94,6 +95,34 @@ async function readManifest(): Promise<ImageManifest> {
 async function writeManifest(manifest: ImageManifest) {
   await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+}
+
+async function syncManifestBackup(image: StoredImage & { active?: boolean; displayOrder?: number }) {
+  const customManifestPath = process.env["PNS_IMAGE_MANIFEST"];
+  if (!customManifestPath) return;
+  const file = path.resolve(customManifestPath);
+  const existing = await readManifest();
+  const sanitized: StoredImage = {
+    id: image.id,
+    category: image.category,
+    url: image.url,
+    path: image.path,
+    sourceType: image.sourceType,
+    filename: image.filename,
+    displayLocation: image.displayLocation ?? "gallery",
+    displayOrder: image.displayOrder ?? 0,
+    active: image.active ?? true,
+    deleted: false,
+  };
+  const manifest = existing;
+  const index = manifest.images.findIndex((candidate) => candidate.id === sanitized.id);
+  if (index >= 0) {
+    manifest.images[index] = { ...manifest.images[index], ...sanitized };
+  } else {
+    manifest.images.push(sanitized);
+  }
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 }
 
 function visibleImages(collection: ImageCollection, category: string, manifest: ImageManifest) {
@@ -110,6 +139,18 @@ function visibleImages(collection: ImageCollection, category: string, manifest: 
   return [...bundled, ...managed];
 }
 
+async function hasStoredUploadImage(relativePath: string | null) {
+  if (!relativePath) return false;
+  const normalized = relativePath.replace(/^\/+/u, "").replace(/^uploads\//u, "");
+  const target = path.resolve(defaultStorageRoot, normalized);
+  try {
+    await access(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function listManagedImages(
   collection: ImageCollection,
   category: string,
@@ -123,8 +164,10 @@ export async function listManagedImages(
         .filter((image) => image.sourceType === "bundled" && !image.active)
         .map((image) => image.id),
     );
-    const bundled = staticImages(collection).filter((image) => !deletedBundledIds.has(image.id));
-    return [...bundled, ...databaseImages.filter((image) => image.active)];
+    const bundled = staticImages(collection)
+      .filter((image) => image.category === category)
+      .filter((image) => !deletedBundledIds.has(image.id));
+    return [...bundled, ...databaseImages.filter((image) => image.active && image.category === category)];
   }
   const manifest = await readManifest();
   return visibleImages(collection, category, manifest);
@@ -159,7 +202,7 @@ export async function addExternalImage(
     );
   }
   if (usesDatabaseImageStore()) {
-    return saveDatabaseImage({
+    const saved = await saveDatabaseImage({
       collection,
       category,
       url: parsed.toString(),
@@ -167,6 +210,18 @@ export async function addExternalImage(
       sourceType: "external",
       createdBy,
     });
+    await syncManifestBackup({
+      ...saved,
+      id: saved.id,
+      sourceType: "external",
+      category,
+      filename: saved.filename ?? null,
+      displayLocation: saved.displayLocation ?? "gallery",
+      displayOrder: saved.displayOrder ?? 0,
+      active: saved.active ?? true,
+      deleted: false,
+    });
+    return saved;
   }
   const image: StoredImage = {
     id: `${collection}:external:${randomUUID()}`,
@@ -189,54 +244,204 @@ export async function addUploadedImage(
   createdBy: string | null = null,
 ) {
   assertCategory(collection, category);
-  if (!allowedTypes.has(file.type)) {
-    throw new ImageManagementError(
-      "invalid_file_type",
-      "Use a JPEG, PNG, WebP, or AVIF image.",
-      400,
-    );
-  }
-  if (file.size > maxUploadBytes) {
-    throw new ImageManagementError("file_too_large", "Images must be 8 MB or smaller.", 400);
-  }
-  const extension = file.type.split("/")[1] === "jpeg" ? "jpg" : file.type.split("/")[1];
-  const filename = `${randomUUID()}.${extension}`;
-  const relativePath = `uploads/${collection}/${category}/${filename}`;
-  const destination = path.resolve(defaultStorageRoot, collection, category, filename);
-  if (!destination.startsWith(`${defaultStorageRoot}${path.sep}`)) {
-    throw new ImageManagementError(
-      "invalid_storage_path",
-      "The image storage path is invalid.",
-      500,
-    );
-  }
-  await mkdir(path.dirname(destination), { recursive: true });
-  await writeFile(destination, Buffer.from(await file.arrayBuffer()));
-  const image: StoredImage = {
-    id: `${collection}:upload:${randomUUID()}`,
-    category,
-    url: `/${relativePath}`,
-    path: relativePath,
-    sourceType: "upload",
-    filename,
-  };
-  if (usesDatabaseImageStore()) {
+
+  try {
+    const converted = await processUploadedImageFile({
+      collection,
+      category,
+      file,
+      storageRoot: defaultStorageRoot,
+    });
+
+    const image: StoredImage = {
+      id: `${collection}:upload:${randomUUID()}`,
+      category,
+      url: converted.url,
+      path: converted.path,
+      sourceType: "upload",
+      filename: converted.storedName,
+    };
+
+    if (usesDatabaseImageStore()) {
+      try {
+        const saved = await saveDatabaseImage({ ...image, collection, category, createdBy });
+        await syncManifestBackup({
+          ...saved,
+          sourceType: "upload",
+          category,
+          filename: saved.filename ?? image.filename ?? converted.storedName,
+          displayLocation: saved.displayLocation ?? "gallery",
+          displayOrder: saved.displayOrder ?? 0,
+          active: saved.active ?? true,
+          deleted: false,
+        });
+        return saved;
+      } catch (error) {
+        await unlink(path.resolve(defaultStorageRoot, converted.path.replace(/^uploads\//u, ""))).catch(
+          () => undefined,
+        );
+        throw error;
+      }
+    }
+
+    const manifest = await readManifest();
+    manifest.images.push(image);
     try {
-      return await saveDatabaseImage({ ...image, collection, category, createdBy });
+      await writeManifest(manifest);
     } catch (error) {
-      await unlink(destination).catch(() => undefined);
+      await unlink(path.resolve(defaultStorageRoot, converted.path.replace(/^uploads\//u, ""))).catch(
+        () => undefined,
+      );
       throw error;
     }
-  }
-  const manifest = await readManifest();
-  manifest.images.push(image);
-  try {
-    await writeManifest(manifest);
+    return image;
   } catch (error) {
-    await unlink(destination).catch(() => undefined);
-    throw error;
+    const message = error instanceof Error ? error.message : "invalid_image";
+    if (message === "file_too_large") {
+      throw new ImageManagementError("file_too_large", "Images must be 8 MB or smaller.", 400);
+    }
+    if (message === "animated_image_unsupported") {
+      throw new ImageManagementError(
+        "animated_image_unsupported",
+        "Animated uploads are not supported. Please use a static image file.",
+        400,
+      );
+    }
+    if (message === "invalid_storage_path") {
+      throw new ImageManagementError(
+        "invalid_storage_path",
+        "The image storage path is invalid.",
+        500,
+      );
+    }
+    if (message === "unsupported_image_format") {
+      throw new ImageManagementError(
+        "invalid_file_type",
+        "Use a JPEG, PNG, WebP, GIF, TIFF, BMP, or AVIF image.",
+        400,
+      );
+    }
+    if (message === "image_too_large") {
+      throw new ImageManagementError(
+        "image_too_large",
+        "The uploaded image exceeds the allowed pixel dimensions.",
+        400,
+      );
+    }
+    throw new ImageManagementError("invalid_image", "The uploaded image could not be processed.", 400);
   }
-  return image;
+}
+
+export async function addUploadedImages(
+  collection: ImageCollection,
+  category: string,
+  files: File[],
+  createdBy: string | null = null,
+) {
+  assertCategory(collection, category);
+  const batch = await processUploadedImagesBatch({
+    collection,
+    category,
+    files,
+    storageRoot: defaultStorageRoot,
+  });
+
+  const fileResults = await Promise.all(
+    batch.files.map(async (file) => {
+      if (!file.success) {
+        return {
+          originalName: file.originalName,
+          storedName: file.storedName,
+          format: file.format || "unknown",
+          converted: file.converted,
+          success: false,
+          path: file.path,
+          url: file.url,
+          error: file.error,
+        };
+      }
+
+      const image: StoredImage = {
+        id: `${collection}:upload:${randomUUID()}`,
+        category,
+        url: file.url,
+        path: file.path,
+        sourceType: "upload",
+        filename: file.storedName,
+      };
+
+      try {
+        if (usesDatabaseImageStore()) {
+          const saved = await saveDatabaseImage({ ...image, collection, category, createdBy });
+          await syncManifestBackup({
+            ...saved,
+            sourceType: "upload",
+            category,
+            filename: saved.filename ?? image.filename ?? file.storedName,
+            displayLocation: saved.displayLocation ?? "gallery",
+            displayOrder: saved.displayOrder ?? 0,
+            active: saved.active ?? true,
+            deleted: false,
+          });
+          return {
+            originalName: file.originalName,
+            storedName: saved.filename ?? file.storedName,
+            format: "webp",
+            converted: file.converted,
+            success: true,
+            path: saved.path ?? file.path,
+            url: saved.url ?? file.url,
+          };
+        }
+
+        const manifest = await readManifest();
+        manifest.images.push(image);
+        await writeManifest(manifest);
+        return {
+          originalName: file.originalName,
+          storedName: image.filename ?? file.storedName,
+          format: "webp",
+          converted: file.converted,
+          success: true,
+          path: image.path ?? file.path,
+          url: image.url ?? file.url,
+        };
+      } catch (error) {
+        if (file.path) {
+          const destination = path.resolve(defaultStorageRoot, file.path.replace(/^uploads\//u, ""));
+          await unlink(destination).catch(() => undefined);
+        }
+        return {
+          originalName: file.originalName,
+          storedName: file.storedName,
+          format: file.format || "unknown",
+          converted: file.converted,
+          success: false,
+          path: file.path,
+          url: file.url,
+          error: {
+            code: "database_error",
+            message: "The image could not be saved to the configured storage backend.",
+          },
+        };
+      }
+    }),
+  );
+
+  const successful = fileResults.filter((file) => file.success).length;
+  const converted = fileResults.filter((file) => file.success && file.converted).length;
+  const alreadyWebp = fileResults.filter((file) => file.success && !file.converted).length;
+  const failed = fileResults.length - successful;
+
+  return {
+    success: failed === 0,
+    total: batch.total,
+    processed: successful,
+    converted,
+    alreadyWebp,
+    failed,
+    files: fileResults,
+  };
 }
 
 export async function deleteManagedImage(

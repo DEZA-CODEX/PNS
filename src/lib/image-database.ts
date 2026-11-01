@@ -1,12 +1,24 @@
+import { access } from "node:fs/promises";
+import path from "node:path";
 import { getAdminDb, hasSupabaseConfig } from "@/lib/admin-auth";
 import type { ImageCollection, ImageSourceType, ManagedImage } from "@/lib/image-management";
 
+async function storageFileExists(relativePath: string | null) {
+  if (!relativePath) return false;
+  const normalized = relativePath.replace(/^\/+/u, "").replace(/^uploads\//u, "");
+  const resolved = path.resolve(process.cwd(), "public", normalized);
+  try {
+    await access(resolved);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function usesDatabaseImageStore() {
   const backend = process.env["PNS_IMAGE_BACKEND"];
-  return (
-    (backend === "supabase" || (process.env["NODE_ENV"] === "production" && backend !== "file")) &&
-    hasSupabaseConfig()
-  );
+  if (backend === "file") return false;
+  return hasSupabaseConfig();
 }
 
 export async function listDatabaseImages(
@@ -25,17 +37,37 @@ export async function listDatabaseImages(
   if (displayLocation) query = query.eq("display_location", displayLocation);
   const { data, error } = await query;
   if (error) throw error;
-  return (data ?? []).map((row) => ({
-    id: String(row.id),
-    category: String(row.category_id),
-    url: String(row.public_url),
-    path: row.storage_path ? String(row.storage_path) : null,
-    sourceType: row.source_type as ImageSourceType,
-    filename: row.storage_path ? (String(row.storage_path).split("/").pop() ?? null) : null,
-    active: Boolean(row.is_active),
-    displayOrder: Number(row.display_order ?? 0),
-    displayLocation: String(row.display_location ?? "gallery"),
-  })) as Array<ManagedImage & { active: boolean; displayOrder: number }>;
+
+  const records = await Promise.all(
+    (data ?? []).map(async (row) => {
+      const storagePath = row.storage_path ? String(row.storage_path) : null;
+      const isMissingUpload =
+        row.source_type === "upload" && storagePath && !(await storageFileExists(storagePath));
+      return {
+        id: String(row.id),
+        category: String(row.category_id),
+        url: isMissingUpload ? "" : String(row.public_url),
+        path: isMissingUpload ? null : storagePath,
+        sourceType: row.source_type as ImageSourceType,
+        filename: storagePath ? (String(storagePath).split("/").pop() ?? null) : null,
+        active: Boolean(row.is_active),
+        displayOrder: Number(row.display_order ?? 0),
+        displayLocation: String(row.display_location ?? "gallery"),
+      } as ManagedImage & { active: boolean; displayOrder: number };
+    }),
+  );
+
+  return records.filter((record) => {
+    if (record.sourceType !== "upload") return true;
+    return record.url !== "";
+  });
+}
+
+function normalizeUuidLike(value: string | null | undefined) {
+  if (!value) return null;
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(value)
+    ? value
+    : null;
 }
 
 export async function saveDatabaseImage(input: {
@@ -57,7 +89,7 @@ export async function saveDatabaseImage(input: {
       storage_path: input.path,
       source_type: input.sourceType,
       display_location: input.displayLocation ?? "gallery",
-      created_by: input.createdBy ?? null,
+      created_by: normalizeUuidLike(input.createdBy),
       legacy_id: input.legacyId ?? null,
     })
     .select(
@@ -89,6 +121,7 @@ export async function disableDatabaseImage(
     .eq("id", id)
     .eq("category_type", collection)
     .eq("category_id", category)
+    .eq("is_active", true)
     .select("id,storage_path,source_type")
     .maybeSingle();
   if (error) throw error;
