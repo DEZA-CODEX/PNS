@@ -8,7 +8,7 @@ export class ApiConfigurationError extends Error {
 }
 
 function apiBaseUrl(): URL {
-  const configured = process.env["NEXT_PUBLIC_API_BASE_URL"]?.trim();
+  const configured = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (!configured) {
     throw new ApiConfigurationError(
       "NEXT_PUBLIC_API_BASE_URL is not configured. Set it to the FastAPI /api/v1 URL.",
