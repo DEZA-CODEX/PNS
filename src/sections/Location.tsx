@@ -5,11 +5,8 @@ export function Location() {
     <section id="vellore" className="mx-auto max-w-[1400px] px-6 py-28 lg:px-12 lg:py-40">
       <div className="grid grid-cols-1 gap-16 lg:grid-cols-2">
         <div>
-          <p className="eyebrow" data-reveal>
-            04 — Vellore
-          </p>
           <h2
-            className="mt-4 font-display text-[clamp(2.2rem,5.5vw,4.5rem)] leading-tight text-cream"
+            className="font-display text-[clamp(2.2rem,5.5vw,4.5rem)] leading-tight text-cream"
             data-reveal
           >
             Discover <span className="italic text-gold">Vellore</span>

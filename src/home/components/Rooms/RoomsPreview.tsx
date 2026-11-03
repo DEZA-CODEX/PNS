@@ -152,11 +152,8 @@ export function RoomsPreview({ onBook }: RoomsPreviewProps) {
   return (
     <section id="stay" className="bg-[var(--color-surface-blue-soft)] px-6 py-24 lg:px-12 lg:py-32">
       <div className="mx-auto max-w-[1400px]">
-        <p className="eyebrow" data-home-reveal>
-          02 — Stay
-        </p>
         <h2
-          className="mt-5 max-w-4xl font-display text-[clamp(2.8rem,7vw,6rem)] leading-[0.86] tracking-[-0.02em] text-cream"
+          className="max-w-4xl font-display text-[clamp(2.8rem,7vw,6rem)] leading-[0.86] tracking-[-0.02em] text-cream"
           data-home-reveal
         >
           Luxury rooms <span className="italic text-gold">&amp; suites</span>

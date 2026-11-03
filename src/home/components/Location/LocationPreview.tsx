@@ -4,8 +4,7 @@ export function LocationPreview() {
     <section id="vellore" className="mx-auto max-w-[1400px] px-6 py-24 lg:px-12 lg:py-32">
       <div className="grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20">
         <div data-home-reveal>
-          <p className="eyebrow">08 — Location</p>
-          <h2 className="mt-5 font-display text-[clamp(2.8rem,6vw,5.5rem)] leading-none text-cream">
+          <h2 className="font-display text-[clamp(2.8rem,6vw,5.5rem)] leading-none text-cream">
             Close to what <span className="italic text-gold">matters.</span>
           </h2>
           <p className="mt-6 max-w-md text-base leading-relaxed text-muted-foreground">

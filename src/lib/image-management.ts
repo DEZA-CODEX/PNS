@@ -25,6 +25,7 @@ export type ManagedImage = {
   displayLocation?: string;
   displayOrder?: number;
   active?: boolean;
+  updatedAt?: string;
 };
 
 type StoredImage = ManagedImage & { deleted?: boolean };
@@ -34,6 +35,26 @@ const manifestPath = path.resolve(
   process.env["PNS_IMAGE_MANIFEST"] ?? "data/uploads/image-manifest.json",
 );
 const defaultStorageRoot = path.resolve(process.env["PNS_IMAGE_STORAGE_DIR"] ?? "public/uploads");
+
+function withCacheVersion(url: string, value: string | number | Date | null | undefined) {
+  if (!url || value === null || value === undefined || value === "") {
+    return url;
+  }
+
+  const version = String(value).replace(/[^A-Za-z0-9_-]/g, "");
+  if (!version) return url;
+
+  try {
+    const parsed = new URL(url, "https://pns.local");
+    parsed.searchParams.set("v", version);
+    return parsed.origin === "https://pns.local"
+      ? `${parsed.pathname}${parsed.search}${parsed.hash}`
+      : parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 const categorySets: Record<ImageCollection, readonly string[]> = {
   room: ROOM_TYPES,
   dining: DINING_TYPES,
@@ -167,10 +188,18 @@ export async function listManagedImages(
     const bundled = staticImages(collection)
       .filter((image) => image.category === category)
       .filter((image) => !deletedBundledIds.has(image.id));
-    return [...bundled, ...databaseImages.filter((image) => image.active && image.category === category)];
+    return [...bundled, ...databaseImages.filter((image) => image.active && image.category === category)].map(
+      (image) => ({
+        ...image,
+        url: withCacheVersion(image.url, image.updatedAt ?? image.id),
+      }),
+    );
   }
   const manifest = await readManifest();
-  return visibleImages(collection, category, manifest);
+  return visibleImages(collection, category, manifest).map((image) => ({
+    ...image,
+    url: withCacheVersion(image.url, image.id ?? image.filename ?? image.path ?? image.displayLocation),
+  }));
 }
 
 export async function listPublicImages(

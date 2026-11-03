@@ -11,23 +11,24 @@ export function Experience() {
         width={1200}
         height={800}
         loading="lazy"
-        className="pointer-events-none absolute right-0 top-16 hidden h-[70%] w-[24%] object-cover opacity-15 lg:block"
+        className="pointer-events-none absolute right-0 top-12 z-0 hidden h-[26rem] w-[32%] max-w-[420px] object-cover opacity-20 md:block"
       />
-      <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
-        <p className="eyebrow" data-home-reveal>
-          05 — Experience
-        </p>
-        <h2
-          className="mt-6 max-w-5xl font-display text-[clamp(3.4rem,10vw,9rem)] leading-[0.82] text-cream"
-          data-home-reveal
-        >
-          Make room for <span className="italic text-gold">the moment.</span>
-        </h2>
-        <div className="mt-16 grid grid-cols-2 gap-y-8 border-t border-gold/40 pt-8 sm:grid-cols-5">
-          {moments.map((moment, index) => (
+      <div className="relative z-10 mx-auto max-w-[1400px] px-6 lg:px-12">
+        <div className="relative">
+          <div className="relative z-10 max-w-[76rem] lg:pr-[26%]">
+            <h2
+              className="max-w-5xl font-display text-[clamp(3.4rem,10vw,9rem)] leading-[0.82] text-cream"
+              data-home-reveal
+            >
+              Make room for <span className="italic text-gold">the moment.</span>
+            </h2>
+            <div className="mt-8 h-px w-full max-w-[36rem] bg-gradient-to-r from-gold via-gold/80 to-transparent" />
+          </div>
+        </div>
+        <div className="mt-12 grid grid-cols-2 gap-y-8 border-t border-gold/40 pt-8 sm:grid-cols-5">
+          {moments.map((moment) => (
             <div key={moment} data-home-reveal>
-              <span className="eyebrow">0{index + 1}</span>
-              <p className="mt-4 font-display text-2xl text-cream">{moment}</p>
+              <p className="font-display text-2xl text-cream">{moment}</p>
             </div>
           ))}
         </div>

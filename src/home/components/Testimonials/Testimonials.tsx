@@ -44,8 +44,7 @@ export function Testimonials({ reviews = demoReviews }: { reviews?: GuestReview[
     <section className="bg-[var(--color-surface-blue-soft)] px-6 py-24 lg:px-12 lg:py-28">
       <div className="mx-auto grid max-w-[1400px] gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:gap-12">
         <div className="max-w-xl" data-home-reveal>
-          <p className="eyebrow">07 — Guest reviews</p>
-          <h2 className="mt-5 font-display text-[clamp(2.5rem,6vw,5rem)] leading-none text-ink">
+          <h2 className="font-display text-[clamp(2.5rem,6vw,5rem)] leading-none text-ink">
             Your stay, in <span className="italic text-gold">your words.</span>
           </h2>
           <p className="mt-6 text-sm leading-relaxed text-muted-foreground">

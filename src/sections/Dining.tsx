@@ -14,11 +14,8 @@ export function Dining() {
   return (
     <section id="dine" className="relative py-28 lg:py-40">
       <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
-        <p className="eyebrow" data-reveal>
-          02 — Dine
-        </p>
         <h2
-          className="mt-4 max-w-3xl font-display text-[clamp(2.2rem,5.5vw,4.5rem)] leading-tight text-cream"
+          className="max-w-3xl font-display text-[clamp(2.2rem,5.5vw,4.5rem)] leading-tight text-cream"
           data-reveal
         >
           Rooftop dining, tradition and <span className="italic text-gold">late nights</span>

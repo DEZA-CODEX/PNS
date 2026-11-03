@@ -17,11 +17,8 @@ export function Events() {
       </div>
 
       <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
-        <p className="eyebrow" data-reveal>
-          03 — Celebrate
-        </p>
         <h2
-          className="mt-6 font-display text-[clamp(3rem,13vw,11rem)] leading-[0.86] text-cream"
+          className="font-display text-[clamp(3rem,13vw,11rem)] leading-[0.86] text-cream"
           data-reveal
         >
           Celebrate

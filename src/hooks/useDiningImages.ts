@@ -40,14 +40,19 @@ export function useDiningImageLibrary() {
         });
     };
     load();
+    const intervalId = window.setInterval(load, 15000);
     const unsubscribe = diningImageRepository.subscribe(load);
     const onManagedImagesChanged = (event: Event) => {
       const collection = (event as CustomEvent<{ collection?: string }>).detail?.collection;
       if (!collection || collection === "dining") load();
     };
+    const onFocus = () => load();
     window.addEventListener("pns-managed-images-changed", onManagedImagesChanged);
+    window.addEventListener("focus", onFocus);
     return () => {
       mounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", onFocus);
       unsubscribe();
       window.removeEventListener("pns-managed-images-changed", onManagedImagesChanged);
     };

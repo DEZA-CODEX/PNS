@@ -7,8 +7,7 @@ export function AboutPreview() {
       className="mx-auto grid max-w-[1400px] grid-cols-1 gap-12 px-6 py-24 lg:grid-cols-[0.8fr_1.2fr] lg:px-12 lg:py-32"
     >
       <div data-home-reveal>
-        <p className="eyebrow">01 — About</p>
-        <h2 className="mt-5 font-display text-[clamp(2.6rem,6vw,5.5rem)] leading-none text-cream">
+        <h2 className="font-display text-[clamp(2.6rem,6vw,5.5rem)] leading-none text-cream">
           A considered stay in <span className="italic text-gold">Vellore.</span>
         </h2>
       </div>
