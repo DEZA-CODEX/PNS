@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AdminPermission, AdminUser } from "@/lib/admin-auth";
+import type { AdminPermission, AdminUser } from "@/lib/admin-types";
+import { apiFetch } from "@/lib/api-client";
 import { PasswordInput } from "@/admin/auth/components/PasswordInput";
 
 const permissionOptions: Array<{ key: AdminPermission; label: string; area: string }> = [
@@ -66,9 +67,9 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
     setError(null);
     const [usersResponse, groupsResponse] = await Promise.all([
       canReadUsers
-        ? fetch(`/api/admin/users?search=${encodeURIComponent(search)}`, { cache: "no-store" })
+        ? apiFetch(`/admin/users?search=${encodeURIComponent(search)}`)
         : Promise.resolve(null),
-      canReadGroups ? fetch("/api/admin/groups", { cache: "no-store" }) : Promise.resolve(null),
+      canReadGroups ? apiFetch("/admin/groups") : Promise.resolve(null),
     ]);
     if (usersResponse) {
       const body = await usersResponse.json();
@@ -94,7 +95,7 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch("/api/admin/users", {
+      const response = await apiFetch("/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newUser),
@@ -121,7 +122,7 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch("/api/admin/groups", {
+      const response = await apiFetch("/admin/groups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newGroup),
@@ -132,7 +133,9 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
       if (body.group) {
         setGroups((current) =>
           current.some((group) => group.id === body.group.id)
-            ? current.map((group) => (group.id === body.group.id ? { ...group, ...body.group } : group))
+            ? current.map((group) =>
+                group.id === body.group.id ? { ...group, ...body.group } : group,
+              )
             : [...current, body.group].sort((left, right) => left.name.localeCompare(right.name)),
         );
       }
@@ -149,7 +152,7 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch("/api/admin/super-admins", {
+      const response = await apiFetch("/admin/super-admins", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newSuperAdmin),
@@ -159,9 +162,7 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
       setNewSuperAdmin({ email: "", password: "" });
       setMessage("Super admin created.");
     } catch (reason: unknown) {
-      setError(
-        reason instanceof Error ? reason.message : "Super admin could not be created.",
-      );
+      setError(reason instanceof Error ? reason.message : "Super admin could not be created.");
     } finally {
       setSaving(false);
     }
@@ -176,11 +177,14 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
     if (checked) permissionState.set(permissionKey, "allow");
     else permissionState.delete(permissionKey);
     try {
-      const response = await fetch(`/api/admin/groups/${group.id}/permissions`, {
+      const response = await apiFetch(`/admin/groups/${group.id}/permissions`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          permissions: [...permissionState].map(([key, effect]) => ({ permissionKey: key, effect })),
+          permissions: [...permissionState].map(([key, effect]) => ({
+            permissionKey: key,
+            effect,
+          })),
         }),
       });
       const body = await response.json();
@@ -213,7 +217,7 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch(`/api/admin/groups/${group.id}/members`, {
+      const response = await apiFetch(`/admin/groups/${group.id}/members`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userIds }),
@@ -239,7 +243,7 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch(`/api/admin/users/${user.id}`, {
+      const response = await apiFetch(`/admin/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: user.status === "active" ? "disabled" : "active" }),
@@ -284,7 +288,7 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch(`/api/admin/users/${passwordUser.id}`, {
+      const response = await apiFetch(`/admin/users/${passwordUser.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: passwordForm.password }),
@@ -439,7 +443,8 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
               Edit password
             </h3>
             <p className="mt-2 text-sm text-[#46536b]">
-              Set a new permanent password for {passwordUser.email}. The existing password cannot be recovered.
+              Set a new permanent password for {passwordUser.email}. The existing password cannot be
+              recovered.
             </p>
             <div className="mt-5 grid gap-4">
               <PasswordInput
@@ -491,7 +496,9 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
               aria-label="Super admin email"
               type="email"
               value={newSuperAdmin.email}
-              onChange={(event) => setNewSuperAdmin({ ...newSuperAdmin, email: event.target.value })}
+              onChange={(event) =>
+                setNewSuperAdmin({ ...newSuperAdmin, email: event.target.value })
+              }
               placeholder="Super admin email"
               className="rounded-lg border border-[var(--color-border-warm)] px-3 py-2"
             />
@@ -499,7 +506,9 @@ export function AdminAccessManagement({ permissions, currentUserRole }: Props) {
               aria-label="Super admin password"
               type="password"
               value={newSuperAdmin.password}
-              onChange={(event) => setNewSuperAdmin({ ...newSuperAdmin, password: event.target.value })}
+              onChange={(event) =>
+                setNewSuperAdmin({ ...newSuperAdmin, password: event.target.value })
+              }
               placeholder="Password"
               className="rounded-lg border border-[var(--color-border-warm)] px-3 py-2"
             />

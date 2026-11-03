@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { apiFetch } from "@/lib/api-client";
+import { getBundledImageRecords } from "@/services/roomImageRepository";
 
 export type ManagedImageRecord = {
   id: string;
@@ -50,7 +52,7 @@ export function ImageManagementControls({
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  const endpoint = `/api/admin/${collection}-images`;
+  const endpoint = `/admin/${collection}-images`;
 
   useEffect(() => {
     const canvas = previewCanvasRef.current;
@@ -82,22 +84,26 @@ export function ImageManagementControls({
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${endpoint}?type=${encodeURIComponent(category)}`, {
+      const response = await apiFetch(`${endpoint}?type=${encodeURIComponent(category)}`, {
         headers: requestHeaders,
-        cache: "no-store",
       });
       const body = (await response.json()) as {
         images?: ManagedImageRecord[];
+        disabledBundledIds?: string[];
         error?: { message?: string };
       };
       if (!response.ok) throw new Error(body.error?.message ?? "Images could not be loaded.");
-      setImages(body.images ?? []);
+      const disabled = new Set(body.disabledBundledIds ?? []);
+      const bundled = getBundledImageRecords(collection, category).filter(
+        (image) => !disabled.has(image.id),
+      );
+      setImages([...bundled, ...(body.images ?? [])]);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "Images could not be loaded.");
     } finally {
       setLoading(false);
     }
-  }, [category, endpoint, requestHeaders]);
+  }, [category, collection, endpoint, requestHeaders]);
 
   useEffect(() => {
     void loadImages();
@@ -118,9 +124,14 @@ export function ImageManagementControls({
         const form = new FormData();
         form.set("category", category);
         form.set("file", file);
-        response = await fetch(endpoint, { method: "POST", headers: requestHeaders, body: form });
+        response = await apiFetch(endpoint, {
+          method: "POST",
+          headers: requestHeaders,
+          body: form,
+          timeoutMs: 120_000,
+        });
       } else {
-        response = await fetch(endpoint, {
+        response = await apiFetch(endpoint, {
           method: "POST",
           headers: { ...requestHeaders, "Content-Type": "application/json" },
           body: JSON.stringify({ category, imageUrl: url.trim() }),
@@ -155,7 +166,7 @@ export function ImageManagementControls({
     setError(null);
     setFeedback(null);
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         `${endpoint}/${encodeURIComponent(image.id)}?type=${encodeURIComponent(category)}`,
         {
           method: "DELETE",
@@ -178,7 +189,7 @@ export function ImageManagementControls({
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch(`/api/admin/images/${encodeURIComponent(image.id)}`, {
+      const response = await apiFetch(`/admin/images/${encodeURIComponent(image.id)}`, {
         method: "PATCH",
         headers: { ...requestHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ categoryType: collection, displayLocation }),

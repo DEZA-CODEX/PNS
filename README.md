@@ -1,107 +1,113 @@
 # Hotel PNS Nakshatra
 
-Hotel PNS Nakshatra is a React 19 and Next.js App Router website styled with Tailwind CSS 4.
-The existing page components, design system, images, transitions, and browser-side interactions
-are retained in `src/`; Next.js route entries live in `app/`.
+The existing React 19 / Next.js 16 application remains the rendering and frontend layer. The
+FastAPI service in `backend/` owns admin APIs, authentication, business logic, and every
+PostgreSQL query. Supabase PostgreSQL remains the source of truth; no hotel-content tables or
+records are created by this migration.
 
-## Development
+## Architecture
 
-Use Node.js 20.9 or later.
-
-```sh
-npm install
-npm run dev
+```text
+Browser -> Nginx -> Next.js pages and assets
+                 -> FastAPI /api/v1 and /uploads
+                    -> Supabase PostgreSQL
+                    -> Supabase Storage (optional, must be configured)
 ```
 
-Available checks and production commands:
+The browser uses the same-origin `/api/v1` prefix in production. Next.js server rendering verifies
+admin sessions by calling FastAPI with the incoming HttpOnly session cookie. The Next.js app has
+no database client, API route handlers, or private Supabase credentials. Image upload records are
+stored in PostgreSQL; uploaded files use the existing persistent `public/uploads` directory by
+default. FastAPI serves those public files at the existing `/uploads/...` URLs.
+
+## Local development
+
+Create the root `.env` from `.env.example` if needed and create `backend/.env` from
+`backend/.env.example`. Put the Supabase PostgreSQL connection string and any private Supabase
+Storage key in `backend/.env` only; the root `.env` is consumed by Next.js and must contain no
+database credentials or service-role secrets. Do not overwrite an existing `.env` blindly, and do
+not share or commit either private file.
+
+For local development, set `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1` in the root
+`.env` and `CORS_ORIGINS=http://localhost:3000` in `backend/.env`, then run FastAPI:
 
 ```sh
-npm run lint
+cd backend
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+In another terminal, run `npm run dev`. For production deployment on Ubuntu with Nginx and
+systemd-managed Next.js and FastAPI services, see
+[docs/ubuntu-deployment.md](./docs/ubuntu-deployment.md).
+For detailed frontend/backend URLs, CORS, cookies, and troubleshooting, see
+[docs/frontend-backend-configuration.md](./docs/frontend-backend-configuration.md).
+
+Run checks:
+
+```sh
 npm run typecheck
+npm run lint
+npm run test:backend
 npm run build
-npm start
 ```
 
-The production build runs on the Next.js server. Do not configure this application as a static
-export: its App Router runtime, metadata routes, and Vercel analytics integration require Next.js
-deployment support.
+Python development dependencies and tests are in `backend/requirements-dev.txt`; production
+dependencies are in `backend/requirements.txt`.
 
-## Routes
+## Database and admin setup
 
-| URL                           | Page                                  |
-| ----------------------------- | ------------------------------------- |
-| `/`                           | Home                                  |
-| `/about-us`                   | About                                 |
-| `/rooms`                      | Rooms                                 |
-| `/dining`                     | Dining                                |
-| `/gallery`                    | Gallery                               |
-| `/contact`                    | Home page with the contact panel open |
-| `/privacy-policy`             | Privacy policy                        |
-| `/terms-and-conditions`       | Terms                                 |
-| `/refund-cancellation-policy` | Refund and cancellation policy        |
-| `/admin`                      | Redirects to the public homepage      |
-| `/admin/login`                | Redirects to the public homepage      |
-| `/admin/forgot-password`      | Redirects to the public homepage      |
+Apply the existing SQL migrations only if they have not already been applied. This migration
+does not reset, reseed, or alter existing data. The checked-in schema provides admin users,
+Super Admins, roles, groups, permissions, sessions, audit events, managed images, and image
+manifest configuration. No backend table definitions exist for hotel inventory, bookings,
+enquiries, banquet management, or general website content, so no replacement CRUD APIs are
+invented for those areas.
 
-The admin dashboard requires a server-managed session. Public website routes remain accessible
-without authentication. User, group, permission, session, audit, and managed-image records are
-stored in Supabase PostgreSQL after applying `supabase/migrations/20261021_admin_rbac.sql`.
+After confirming the existing RBAC schema is present, create the initial Super Admin without
+overwriting an existing account:
 
-## Room and dining image libraries
+```sh
+npm run bootstrap:superadmin
+```
 
-The public room and dining pages, homepage previews, galleries, and admin selectors read from
-`src/services/roomImageRepository.ts`. Existing image binaries remain in `src/assets/rooms/` and
-`src/assets/dining/`; `src/lib/asset-manifest.ts` statically maps these assets for Next.js builds.
+To import existing JSON backup data without replacing existing rows:
 
-When adding a supported room or dining photograph, place it in its existing category folder and
-add its static import and path entry to `src/lib/asset-manifest.ts`. Image selection, display order,
-and dining display-count settings are versioned in browser `localStorage`; images are bundled into
-the website and are not uploaded or synchronized. Local storage is not shared between visitors or
-browsers.
+```sh
+npm run import:legacy-data
+```
 
-Hero slide images are also statically listed in `src/lib/asset-manifest.ts`. Preserve their source
-files and update the corresponding manifest entries when changing those collections.
+The importer reads `data/admin-auth-store.json` and the path in `PNS_IMAGE_MANIFEST`. It performs
+all database work through Python and inserts only missing records.
 
-## Environment and deployment
+## API and authentication
 
-`SITE_URL` is an optional server-only environment variable used for canonical URLs, the sitemap,
-and `robots.txt`. It defaults to `https://hotelpnsnakshatra.com`; set it to the canonical HTTPS
-origin for a different production domain before building. These metadata routes are generated at
-build time. The variable is read only by server-side code and is not exposed to browser code.
+FastAPI exposes `/api/v1/admin/auth/{login,logout,me}`, admin users, groups, Super Admin creation,
+audit events, room/dining image management, and public room/dining image lists. The full endpoint
+and consumer mapping is in [docs/backend-migration-inventory.md](./docs/backend-migration-inventory.md).
 
-Public pages include page-specific titles, descriptions, canonical URLs, Open Graph and Twitter
-metadata. The root layout also emits Hotel structured data using the existing site name, address,
-and contact number. Admin URLs are marked `noindex` and excluded from the sitemap.
+Admin sessions keep the existing `pns_admin_session` HttpOnly cookie; only a SHA-256 token hash is
+stored in PostgreSQL. Existing bcrypt and legacy scrypt password hashes are verified without
+changing user records. Role and permission checks are enforced server-side. Login throttling uses
+Redis when `REDIS_URL` is configured; single-instance deployments can omit it and use the local
+limiter. When running multiple backend instances, configure all instances to use the same Redis
+service.
 
-Image uploads are centrally processed with `sharp` before being written to disk. Uploads are
-validated against the actual file content, converted to `.webp` when needed, and stored in the
-existing `uploads/<collection>/<category>/` structure without changing the public site layout.
-The legacy JSON files remain a migration source for the original app data, while the runtime source
-of truth for active uploaded records is the Supabase `managed_images` table and the
-`image_manifest_config` table used for destination metadata. Import the current backup values from
-`data/admin-auth-store.json` and `data/uploads/image-manifest.json` with
-`npm run import:legacy-data` (or `npm run import:image-manifest`) after applying the migration.
+`/health/live` and `/health/ready` provide liveness and database readiness checks. API docs are
+disabled by default. If enabled, Nginx restricts `/docs` and `/openapi.json` to loopback requests.
 
-Vercel should use its Next.js framework detection and the normal `npm run build` command. The
-custom `vercel.json` security headers remain in place; the old Vite SPA rewrite has been removed.
-Keep environment values in the deployment platform rather than committing private `.env` files.
+## Image storage
 
-The admin image controls use the Next.js server runtime and RBAC. Room image routes are
-`/api/admin/room-images` and `/api/admin/room-images/:imageId`; dining image routes are
-`/api/admin/dining-images` and `/api/admin/dining-images/:imageId`. Both collections support
-authenticated `GET`, multipart `POST` uploads, JSON URL `POST` requests, and `DELETE`. Public
-website consumers read `/api/images/room?type=...` and `/api/images/dining?type=...`, while bundled
-assets remain the fallback. Managed records also support `PATCH /api/admin/images/:imageId` for
-display location, order, and active-state metadata.
+Uploads preserve the existing room/dining categories, folder layout, URL contract, and 8 MiB
+per-image limit. FastAPI validates the actual image, rejects animated or oversized images, and
+converts supported non-WebP formats. Local uploads persist under `public/uploads` and are served
+through FastAPI; external URLs remain references and are not downloaded or remotely deleted.
 
-Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (or the legacy `SUPABASE_SECRET_KEY` alias)
-with `PNS_IMAGE_BACKEND=supabase` in production. Run `INITIAL_SUPERADMIN_EMAIL` and
-`INITIAL_SUPERADMIN_PASSWORD` through the server-only `npm run bootstrap:superadmin` command after
-applying the migration. The bootstrap is idempotent and never overwrites an existing account.
-Never commit `.env`; use `.env.example` as the variable template and rotate any credential that
-has been exposed.
-
-For local image smoke tests, set `PNS_IMAGE_BACKEND=file`, `PNS_IMAGE_MANIFEST`, and
-`PNS_IMAGE_STORAGE_DIR` to temporary paths. Production uploads require a persistent mounted
-volume or an object-storage implementation; external URLs are stored as references and are never
-downloaded or deleted remotely.
+The backend includes a Supabase Storage adapter, but no bucket is created or configured here. To
+use an existing public bucket, configure `SUPABASE_URL`, the private
+`SUPABASE_SERVICE_ROLE_KEY`, `PNS_IMAGE_STORAGE_BUCKET`, and `PNS_IMAGE_BACKEND=supabase` on the
+backend only. Do not put database credentials or the service-role key in `NEXT_PUBLIC_*` variables.
+Before scaling across hosts, use shared object storage rather than the single-host
+`public/uploads` directory.

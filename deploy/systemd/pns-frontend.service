@@ -1,0 +1,16 @@
+[Unit]
+Description=PNS Next.js frontend
+After=network.target
+
+[Service]
+Type=simple
+User=pns
+Group=pns
+WorkingDirectory=/opt/pns
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm run start -- --hostname 127.0.0.1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

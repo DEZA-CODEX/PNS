@@ -32,5 +32,13 @@ out
 *.sln
 *.sw?
 .env
-.vercel
 .env*
+!.env.example
+!backend/.env.example
+.vercel
+
+
+
+#python
+*.venv
+*.pyc

@@ -38,7 +38,7 @@ import { AdminAccessManagement } from "@/admin/AdminAccessManagement";
 import { DiningImageManagement } from "@/admin/DiningImageManagement";
 import { RoomImageManagement } from "@/admin/RoomImageManagement";
 import { authService } from "@/admin/auth/services/authService";
-import type { AdminUser } from "@/lib/admin-auth";
+import type { AdminUser } from "@/lib/admin-types";
 
 const navSections = [
   ["Dashboard", Home],
@@ -251,7 +251,10 @@ export function AdminPanel({
           {activeSection === "Room Image Management" ? <RoomImageManagement /> : null}
           {activeSection === "Dining Image Management" ? <DiningImageManagement /> : null}
           {activeSection === "Users and Groups" ? (
-            <AdminAccessManagement permissions={permissions} currentUserRole={currentUser.roleName} />
+            <AdminAccessManagement
+              permissions={permissions}
+              currentUserRole={currentUser.roleName}
+            />
           ) : null}
           {activeSection === "Dashboard" ? (
             <div>
