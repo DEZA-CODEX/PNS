@@ -1,1 +1,1 @@
-NEXT_PUBLIC_API_BASE_URL=https://literate-orbit-97rj9vv5qjxw3xx7w-8000.app.github.dev/api/v1
+NEXT_PUBLIC_API_BASE_URL=https://literate-orbit-97rj9vv5qjxw3xx7w-8000.app.github.dev/

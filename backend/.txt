@@ -18,6 +18,6 @@ PNS_IMAGE_STORAGE_DIR=../public/uploads
 PNS_SECURE_COOKIES=true
 PNS_COOKIE_SAMESITE=lax
 
-PNS_ALLOWED_HOSTS=localhost,127.0.0.1,testserver,literate-orbit-97rj9vv5qjxw3xx7w-8000.app.github.dev
+PNS_ALLOWED_HOSTS=*,localhost,127.0.0.1,testserver,literate-orbit-97rj9vv5qjxw3xx7w-8000.app.github.dev
 # PNS_IMAGE_STORAGE_BUCKET=your-existing-public-image-bucket
 DATABASE_URL=postgresql://postgres.jfugjjnyhtzzagpkttgx:Mohanbabu%402212@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
