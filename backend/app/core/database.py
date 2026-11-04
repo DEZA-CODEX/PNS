@@ -4,7 +4,6 @@ import logging
 from collections.abc import AsyncIterator
 from functools import lru_cache
 
-from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -47,7 +46,7 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
     try:
         async with factory() as session:
             yield session
-    except DBAPIError as error:
+    except Exception as error:
         logger.exception("PostgreSQL operation failed while serving a database request.")
         raise ServiceUnavailableError(
             "The PostgreSQL database is unavailable. Check the backend database "

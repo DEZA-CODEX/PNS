@@ -8,7 +8,6 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.v1.router import router as v1_router
@@ -32,7 +31,7 @@ async def lifespan(_: FastAPI):
         try:
             async with engine.connect() as connection:
                 await connection.execute(text("SELECT 1"))
-        except DBAPIError:
+        except Exception:
             logger.exception(
                 "PostgreSQL is unreachable during startup. The API will start in "
                 "degraded mode; database routes will return 503. If this environment "
