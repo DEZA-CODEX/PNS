@@ -26,6 +26,19 @@ import {
   type RoomImageSettingsRecord,
   type RoomType,
 } from "@/types/roomImages";
+import { apiFetch, apiResourceUrl } from "@/lib/api-client";
+
+export type BundledManagedImage = {
+  id: string;
+  category: string;
+  url: string;
+  path: string;
+  sourceType: "bundled";
+  filename: string;
+  displayLocation: string;
+  displayOrder: number;
+  active: boolean;
+};
 
 const STORAGE_KEY = "pns-room-images:v1";
 const SCHEMA_VERSION = 1;
@@ -237,9 +250,7 @@ async function mergeServerRoomImages(result: RoomImageLoadResult) {
   if (typeof window === "undefined") return result;
   try {
     const responses = await Promise.all(
-      ROOM_TYPES.map((roomType) =>
-        fetch(`/api/images/room?type=${roomType}`, { cache: "no-store" }),
-      ),
+      ROOM_TYPES.map((roomType) => apiFetch(`/images/room?type=${roomType}`)),
     );
     const payloads = await Promise.all(
       responses.map((response) =>
@@ -253,16 +264,17 @@ async function mergeServerRoomImages(result: RoomImageLoadResult) {
                 sourceType: "bundled" | "upload" | "external";
                 filename: string | null;
               }>;
+              disabledBundledIds?: string[];
             }>)
           : null,
       ),
     );
-    const serverIds = new Set(
-      payloads.flatMap((payload) => payload?.images?.map((image) => image.id) ?? []),
-    );
     const bundledIds = new Set(createDiscoveredImages().map((image) => image.id));
+    const disabledBundledIds = new Set(
+      payloads.flatMap((payload) => payload?.disabledBundledIds ?? []),
+    );
     result.images = result.images.filter(
-      (image) => !bundledIds.has(image.id) || serverIds.has(image.id),
+      (image) => !bundledIds.has(image.id) || !disabledBundledIds.has(image.id),
     );
     for (const image of payloads.flatMap((payload) => payload?.images ?? [])) {
       if (result.images.some((current) => current.id === image.id)) continue;
@@ -271,7 +283,7 @@ async function mergeServerRoomImages(result: RoomImageLoadResult) {
         roomType: image.category as RoomType,
         filename: image.filename ?? image.id,
         storageKey: image.path ?? image.url,
-        url: image.url,
+        url: apiResourceUrl(image.url),
         altText: `${ROOM_TYPE_LABELS[image.category as RoomType]} room at Hotel PNS Nakshatra`,
         displayOrder: 0,
         active: true,
@@ -597,9 +609,7 @@ async function mergeServerDiningImages(result: DiningImageLoadResult) {
   if (typeof window === "undefined") return result;
   try {
     const responses = await Promise.all(
-      DINING_TYPES.map((diningType) =>
-        fetch(`/api/images/dining?type=${diningType}`, { cache: "no-store" }),
-      ),
+      DINING_TYPES.map((diningType) => apiFetch(`/images/dining?type=${diningType}`)),
     );
     const payloads = await Promise.all(
       responses.map((response) =>
@@ -613,16 +623,17 @@ async function mergeServerDiningImages(result: DiningImageLoadResult) {
                 sourceType: "bundled" | "upload" | "external";
                 filename: string | null;
               }>;
+              disabledBundledIds?: string[];
             }>)
           : null,
       ),
     );
-    const serverIds = new Set(
-      payloads.flatMap((payload) => payload?.images?.map((image) => image.id) ?? []),
-    );
     const bundledIds = new Set(createDiscoveredDiningImages().map((image) => image.id));
+    const disabledBundledIds = new Set(
+      payloads.flatMap((payload) => payload?.disabledBundledIds ?? []),
+    );
     result.images = result.images.filter(
-      (image) => !bundledIds.has(image.id) || serverIds.has(image.id),
+      (image) => !bundledIds.has(image.id) || !disabledBundledIds.has(image.id),
     );
     for (const image of payloads.flatMap((payload) => payload?.images ?? [])) {
       if (result.images.some((current) => current.id === image.id)) continue;
@@ -632,7 +643,7 @@ async function mergeServerDiningImages(result: DiningImageLoadResult) {
         diningType,
         filename: image.filename ?? image.id,
         storageKey: image.path ?? image.url,
-        url: image.url,
+        url: apiResourceUrl(image.url),
         altText: `${DINING_TYPE_LABELS[diningType]} at Hotel PNS Nakshatra`,
         displayOrder: 0,
         active: true,
@@ -836,4 +847,31 @@ export function getRoomImageCounts(images: RoomImage[], roomType: RoomType) {
       ).length,
     ]),
   ) as Record<RoomImageDestination, number>;
+}
+
+export function getBundledImageRecords(
+  collection: "room" | "dining",
+  category: string,
+): BundledManagedImage[] {
+  const assets = collection === "room" ? roomImageAssets : diningImageAssets;
+  const pathSegment = collection === "room" ? "rooms" : "dining";
+  return Object.entries(assets).flatMap(([assetPath, url]) => {
+    const match = assetPath.match(new RegExp(`/src/assets/${pathSegment}/([^/]+)/`));
+    if (!match || match[1] !== category) return [];
+    const storageKey = assetPath.replace(new RegExp(`^/src/assets/${pathSegment}/`), "");
+    const filename = assetPath.split("/").pop() ?? assetPath;
+    return [
+      {
+        id: `${category}:${storageKey.toLowerCase()}`,
+        category,
+        url,
+        path: assetPath.replace(/^\//u, ""),
+        sourceType: "bundled" as const,
+        filename,
+        displayLocation: "gallery",
+        displayOrder: 0,
+        active: true,
+      },
+    ];
+  });
 }

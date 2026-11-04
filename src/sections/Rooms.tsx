@@ -7,11 +7,8 @@ export function Rooms() {
 
   return (
     <section id="stay" className="relative mx-auto max-w-[1400px] px-6 py-28 lg:px-12 lg:py-40">
-      <p className="eyebrow" data-reveal>
-        01 — Stay
-      </p>
       <h2
-        className="mt-4 max-w-3xl font-display text-[clamp(2.2rem,5.5vw,4.5rem)] leading-tight text-cream"
+        className="max-w-3xl font-display text-[clamp(2.2rem,5.5vw,4.5rem)] leading-tight text-cream"
         data-reveal
       >
         Premium rooms at <span className="italic text-gold">PNS Nakshatra</span>

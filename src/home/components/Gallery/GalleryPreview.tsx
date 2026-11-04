@@ -24,11 +24,8 @@ export function GalleryPreview() {
   return (
     <section id="gallery" className="bg-[var(--color-surface-cool)] py-24 lg:py-32">
       <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
-        <p className="eyebrow" data-home-reveal>
-          06 — Gallery
-        </p>
         <h2
-          className="mt-5 font-display text-[clamp(2.5rem,6vw,5.2rem)] text-cream"
+          className="font-display text-[clamp(2.5rem,6vw,5.2rem)] text-cream"
           data-home-reveal
         >
           See the spaces.

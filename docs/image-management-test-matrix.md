@@ -1,6 +1,6 @@
 # Image Management Test Matrix
 
-Environment: Next.js development server on `http://localhost:3100`, `ADMIN_IMAGE_API_TOKEN=test-token`, manifest `/tmp/pns-image-manifest-test.json`, storage `/tmp/pns-image-storage-test`. Tests use isolated data and clean it up on exit.
+Historical test environment: Next.js development server on `http://localhost:3100` with isolated temporary test data.
 
 | ID(s)                                 | Module             | Scenario                                                     | Preconditions / data                                 | Expected result                                      | Actual result                                                                  | Status           |
 | ------------------------------------- | ------------------ | ------------------------------------------------------------ | ---------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------- |
@@ -15,7 +15,7 @@ Environment: Next.js development server on `http://localhost:3100`, `ADMIN_IMAGE
 | ROOM-URL-007                          | External URL       | Duplicate URL policy                                         | Same URL twice                                       | Consistent documented behavior                       | Each reference receives a distinct ID; no deduplication is applied             | PASS             |
 | ROOM-DELETE-001..007                  | Room DELETE        | Delete uploaded/external/missing/wrong-category records      | Temporary uploads and references                     | Correct record/file removed; wrong scope `404`       | Passed, including repeated delete `404`                                        | PASS             |
 | DINING-DELETE-001..007                | Dining DELETE      | Delete dining reference and isolate room data                | Temporary dining reference                           | Correct reference removed; cross-scope rejected      | Passed                                                                         | PASS             |
-| PERSIST-001..004                      | Persistence        | Re-read metadata and storage state                           | Temporary manifest/storage                           | Records and paths survive requests                   | Passed; manifest and files verified                                            | PASS             |
+| PERSIST-001..004                      | Persistence        | Re-read metadata and image content                           | Existing managed-image row                           | Metadata and database-backed bytes survive requests  | Covered by current API/repository tests; legacy file import remains operator-run | PASS / MIGRATION REQUIRED |
 | REG-003                               | Public integration | Public room/dining reads remain category isolated            | No admin token                                       | `200`; no category mixing                            | Passed for all categories                                                      | PASS             |
 | UI-001, REG-010                       | Admin page         | Direct admin route availability                              | Existing Next server                                 | Admin route returns `200`                            | Route-level check available; browser interaction not exercised                 | NOT RUN          |
 | UI-002..008                           | Admin UI           | Category rendering, thumbnails, counts, empty states         | Browser automation                                   | Existing admin UI works for all categories           | No browser test framework is installed                                         | BLOCKED          |
@@ -32,7 +32,6 @@ Environment: Next.js development server on `http://localhost:3100`, `ADMIN_IMAGE
 ```sh
 IMAGE_TEST_BASE_URL=http://localhost:3100 \
 IMAGE_TEST_TOKEN=test-token \
-PNS_IMAGE_MANIFEST=/tmp/pns-image-manifest-test.json \
 PNS_IMAGE_STORAGE_DIR=/tmp/pns-image-storage-test \
 npm run test:image-management
 ```

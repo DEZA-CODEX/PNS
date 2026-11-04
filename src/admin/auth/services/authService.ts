@@ -1,4 +1,5 @@
 import type { CreateAccountFormData, LoginFormData } from "../types";
+import { apiFetch } from "@/lib/api-client";
 
 export type AuthApiResult = {
   success: boolean;
@@ -26,7 +27,7 @@ export function validatePasswordRequirements(password: string) {
 
 export const authService = {
   async login(payload: LoginFormData): Promise<AuthApiResult> {
-    const response = await fetch("/api/admin/auth/login", {
+    const response = await apiFetch("/admin/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -44,7 +45,7 @@ export const authService = {
   },
 
   async logout(): Promise<AuthApiResult> {
-    const response = await fetch("/api/admin/auth/logout", { method: "POST" });
+    const response = await apiFetch("/admin/auth/logout", { method: "POST" });
     return response.ok
       ? { success: true }
       : { success: false, message: "Sign-out is temporarily unavailable." };

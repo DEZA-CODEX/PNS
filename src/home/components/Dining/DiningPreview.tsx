@@ -35,11 +35,8 @@ export function DiningPreview() {
   return (
     <section id="dine" className="bg-[var(--color-surface-blue)] px-6 py-24 lg:px-12 lg:py-32">
       <div className="mx-auto max-w-[1400px]">
-        <p className="eyebrow" data-home-reveal>
-          03 — Dine
-        </p>
         <h2
-          className="mt-5 max-w-4xl font-display text-[clamp(2.5rem,6vw,5.2rem)] leading-none text-cream"
+          className="max-w-4xl font-display text-[clamp(2.5rem,6vw,5.2rem)] leading-none text-cream"
           data-home-reveal
         >
           Good evenings begin <span className="italic text-gold">here.</span>

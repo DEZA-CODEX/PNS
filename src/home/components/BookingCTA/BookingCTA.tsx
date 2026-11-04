@@ -1,6 +1,6 @@
 import heroHotel from "@/assets/hero-bg/hero-hotel.jpg";
 
-export function BookingCTA({ onBook }: { onBook: () => void }) {
+export function BookingCTA({ onBook: _onBook }: { onBook: () => void }) {
   return (
     <section className="dark-surface relative overflow-hidden border-y border-border px-6 py-32 lg:px-12 lg:py-48">
       <img
@@ -16,9 +16,6 @@ export function BookingCTA({ onBook }: { onBook: () => void }) {
           Experience <span className="italic text-gold">Nakshatra.</span>
         </h2>
         <div className="mt-10 flex flex-wrap gap-6">
-          <button onClick={onBook} className="luxury-button luxury-button-hover px-9 py-4">
-            Book your stay
-          </button>
           <a href="mailto:stay@pnsnakshatra.com" className="luxury-button-ghost px-9 py-4">
             Contact us
           </a>
