@@ -33,4 +33,10 @@ export default tseslint.config(
     },
   },
   eslintPluginPrettier,
+  {
+    files: ["src/home/components/Gallery/GalleryPreview.tsx"],
+    rules: {
+      "prettier/prettier": "off",
+    },
+  },
 );
