@@ -13,11 +13,7 @@ private values must never be copied into the frontend environment.
 | `FRONTEND_URL` | FastAPI | Canonical frontend origin for deployment documentation and configuration. |
 | `CORS_ORIGINS` | FastAPI | Comma-separated exact browser origins allowed to call the API with credentials. |
 | `PNS_ALLOWED_HOSTS` | FastAPI | Comma-separated API hostnames accepted by FastAPI's host validation. |
-| `DATABASE_URL` | FastAPI only | Existing Supabase PostgreSQL connection string. Leave empty until configured. |
-| `SUPABASE_URL` | FastAPI only | Supabase project URL used for storage integration. |
-| `SUPABASE_PUBLISHABLE_KEY` | FastAPI only | Supabase publishable API key; not a database credential. |
-| `SUPABASE_SECRET_KEY` | FastAPI only | Server-only Supabase secret API key; never expose it to frontend code. |
-| `SUPABASE_JWKS_URL` | FastAPI only | Supabase JWKS endpoint URL. |
+| `DATABASE_URL` | FastAPI only | PostgreSQL connection string for the existing Supabase database. |
 | `PNS_SECURE_COOKIES` | FastAPI | Explicitly overrides the Secure cookie flag. Use `true` over HTTPS. |
 | `PNS_COOKIE_SAMESITE` | FastAPI | `lax` by default; use `none` only for cross-site HTTPS deployments. |
 | `PNS_COOKIE_DOMAIN` | FastAPI | Optional cookie domain, e.g. a shared parent domain for frontend/API subdomains. |
@@ -27,8 +23,8 @@ URLs, service-role keys, or any secret in a `NEXT_PUBLIC_*` variable.
 
 ## Development
 
-Create `.env` and `backend/.env` from their examples, preserving any existing private files.
-Configure the frontend root `.env`:
+Configure the ignored frontend root `.env` and `backend/.env` directly. Keep database connection
+credentials only in `backend/.env`.
 
 ```dotenv
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
@@ -44,8 +40,10 @@ DATABASE_URL=
 ```
 
 Install backend dependencies with `python -m pip install -r requirements-dev.txt` from `backend/`.
-Run FastAPI on port 8000 and Next.js on port 3000. Use the actual Next.js frontend origin in
-`CORS_ORIGINS`; origins must include scheme and port where applicable, with no path.
+Run the backend with `npm run backend:dev` and Next.js with `npm run dev`. These development
+commands bind to `0.0.0.0`; use the actual Next.js frontend origin in `CORS_ORIGINS` and the
+actual API hostname in `PNS_ALLOWED_HOSTS`. Origins must include scheme and port where applicable,
+with no path. Do not use wildcard CORS with credentials.
 
 ## Production and changing API URLs
 
@@ -65,10 +63,8 @@ DATABASE_URL=your-existing-supabase-postgresql-connection
 PNS_SECURE_COOKIES=true
 ```
 
-Replace example values with the deployment's real URLs and the existing Supabase connection
-string. Keep the database URL and server-only Supabase key only in `backend/.env`. Supabase
-project/API keys are not a PostgreSQL `DATABASE_URL`; keep the existing database connection
-string unless you have a replacement PostgreSQL connection URL. `CORS_ORIGINS` accepts a comma-separated
+Replace example values with the deployment's real URLs and existing PostgreSQL connection string.
+Keep the database URL only in `backend/.env`. `CORS_ORIGINS` accepts a comma-separated
 list for multiple exact origins. Wildcard origins are rejected because credentialed CORS cannot
 safely use `*`.
 
@@ -102,8 +98,13 @@ possible.
   credentials are included, the API response sets `pns_admin_session`, and cookie SameSite/Secure/
   domain attributes suit the deployment. Use HTTPS for production.
 - **HTTP 503 or `/health/ready` reports database unavailable:** verify `DATABASE_URL` in
-  `backend/.env` refers to the existing Supabase database and restart FastAPI. `/health/live`
-  checks process health only and does not require the database.
+  `backend/.env` refers to the existing Supabase database and restart FastAPI. FastAPI stays
+  available in degraded mode if PostgreSQL cannot be reached; `/health/live` checks process
+  health only, while `/health/ready` reports database readiness. In IPv4-only environments,
+  Supabase's direct database hostname may resolve only to IPv6. Use the project's IPv4-compatible
+  **Session pooler** connection string from Supabase **Project Settings → Database → Connection
+  string** and update only the backend `DATABASE_URL`; do not guess the pooler host or expose its
+  password in frontend variables.
 - **Network failure:** the shared frontend API client logs “Backend was not connected” and shows
   a notification when a request cannot reach FastAPI or times out. Verify
   `NEXT_PUBLIC_API_BASE_URL` points to the reachable API, the API hostname is included in

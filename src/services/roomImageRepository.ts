@@ -26,7 +26,7 @@ import {
   type RoomImageSettingsRecord,
   type RoomType,
 } from "@/types/roomImages";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, apiResourceUrl } from "@/lib/api-client";
 
 export type BundledManagedImage = {
   id: string;
@@ -283,7 +283,7 @@ async function mergeServerRoomImages(result: RoomImageLoadResult) {
         roomType: image.category as RoomType,
         filename: image.filename ?? image.id,
         storageKey: image.path ?? image.url,
-        url: image.url,
+        url: apiResourceUrl(image.url),
         altText: `${ROOM_TYPE_LABELS[image.category as RoomType]} room at Hotel PNS Nakshatra`,
         displayOrder: 0,
         active: true,
@@ -643,7 +643,7 @@ async function mergeServerDiningImages(result: DiningImageLoadResult) {
         diningType,
         filename: image.filename ?? image.id,
         storageKey: image.path ?? image.url,
-        url: image.url,
+        url: apiResourceUrl(image.url),
         altText: `${DINING_TYPE_LABELS[diningType]} at Hotel PNS Nakshatra`,
         displayOrder: 0,
         active: true,

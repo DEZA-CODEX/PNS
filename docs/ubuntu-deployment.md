@@ -33,13 +33,13 @@ sudo chown -R pns:pns /opt/pns
 sudo -u pns install -d /opt/pns/public/uploads
 ```
 
-Create each private environment file only if it does not already exist. Edit them on the server
-and keep them out of source control:
+Create each private environment file only if it does not already exist. Populate them directly on
+the server and keep them out of source control:
 
 ```sh
 cd /opt/pns
-if [ ! -f .env ]; then sudo -u pns cp .env.example .env; fi
-if [ ! -f backend/.env ]; then sudo -u pns cp backend/.env.example backend/.env; fi
+if [ ! -f .env ]; then sudo -u pns touch .env; fi
+if [ ! -f backend/.env ]; then sudo -u pns touch backend/.env; fi
 sudo chmod 600 .env backend/.env
 ```
 
@@ -54,9 +54,10 @@ In `backend/.env`, set `APP_ENV=production`, `FRONTEND_URL=https://your-domain.e
 `CORS_ORIGINS=https://your-domain.example`, `DATABASE_URL` to the existing Supabase PostgreSQL
 connection string, `PNS_IMAGE_STORAGE_DIR=/opt/pns/public/uploads`, and
 `PNS_ALLOWED_HOSTS=localhost,127.0.0.1,your-domain.example`. Set
-`PNS_SECURE_COOKIES=true` when serving HTTPS. Keep `SUPABASE_SERVICE_ROLE_KEY` and all database
-credentials in the backend environment file only. Redis is optional for a single backend instance;
-set `REDIS_URL` only when a shared Redis service is available. Do not configure or create a local
+`PNS_SECURE_COOKIES=true` when serving HTTPS. Keep all database credentials in the backend
+environment file only. `PNS_IMAGE_STORAGE_DIR` is only used by the one-time legacy image migration;
+new uploads are stored in PostgreSQL. Redis is optional for a single backend instance; set
+`REDIS_URL` only when a shared Redis service is available. Do not configure or create a local
 database.
 
 ## Install Python dependencies and build Next.js
@@ -108,8 +109,8 @@ sudo systemctl restart pns-backend
 
 ## Configure Nginx
 
-The supplied config routes `/api/v1/` and `/uploads/` to FastAPI and all other requests to
-Next.js. It preserves the incoming host, forwarded protocol, and browser cookies.
+The supplied config routes `/api/v1/` to FastAPI and all other requests, including legacy public
+uploads, to Next.js. It preserves the incoming host, forwarded protocol, and browser cookies.
 
 ```sh
 sudo install -D -m 0644 deploy/nginx/proxy-locations.conf /etc/nginx/snippets/pns-locations.conf

@@ -56,7 +56,6 @@ from app.services.image_service import (
     delete_managed_image,
     list_images,
     patch_image,
-    restore_deleted_image,
 )
 
 logger = logging.getLogger("pns.api.admin")
@@ -910,29 +909,17 @@ def _image_router(collection: str) -> None:
     ) -> Response:
         if not category:
             raise ImageManagementError("invalid_category", "The image category is invalid.", 400)
-        deleted_file = await delete_managed_image(db, collection, category, image_id)
-        try:
-            await write_audit_event(
-                db,
-                context.user["id"],
-                f"{collection}_images.delete",
-                collection,
-                image_id,
-                "success",
-                _request_id(request),
-            )
-            await db.commit()
-        except Exception:
-            await db.rollback()
-            if deleted_file:
-                try:
-                    await restore_deleted_image(deleted_file)
-                except Exception:
-                    logger.exception(
-                        "Image delete compensation failed for storage path %s",
-                        deleted_file[0],
-                    )
-            raise
+        await delete_managed_image(db, collection, category, image_id)
+        await write_audit_event(
+            db,
+            context.user["id"],
+            f"{collection}_images.delete",
+            collection,
+            image_id,
+            "success",
+            _request_id(request),
+        )
+        await db.commit()
         return JSONResponse(
             {
                 "success": True,

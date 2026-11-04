@@ -25,25 +25,8 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DATABASE_URL", "SUPABASE_DB_URL"),
     )
     redis_url: str | None = Field(default=None, validation_alias="REDIS_URL")
-    supabase_url: str | None = Field(default=None, validation_alias="SUPABASE_URL")
-    supabase_publishable_key: str | None = Field(
-        default=None, validation_alias="SUPABASE_PUBLISHABLE_KEY"
-    )
-    supabase_service_key: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices(
-            "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE"
-        ),
-    )
-    supabase_jwks_url: str | None = Field(default=None, validation_alias="SUPABASE_JWKS_URL")
-    storage_bucket: str | None = Field(
-        default=None, validation_alias="PNS_IMAGE_STORAGE_BUCKET"
-    )
     image_storage_dir: str = Field(
         default="../public/uploads", validation_alias="PNS_IMAGE_STORAGE_DIR"
-    )
-    image_storage_backend: str = Field(
-        default="file", validation_alias="PNS_IMAGE_BACKEND"
     )
     session_cookie_name: str = "pns_admin_session"
     secure_cookies: bool | None = Field(
@@ -77,6 +60,13 @@ class Settings(BaseSettings):
             raise ValueError("CORS_ORIGINS cannot include '*' when credentials are enabled.")
         return origins
 
+    @field_validator("allowed_hosts")
+    @classmethod
+    def reject_wildcard_allowed_host(cls, hosts: list[str]) -> list[str]:
+        if any("*" in host for host in hosts):
+            raise ValueError("PNS_ALLOWED_HOSTS must contain exact hostnames, not wildcards.")
+        return hosts
+
     @field_validator("cookie_samesite")
     @classmethod
     def validate_cookie_samesite(cls, value: str) -> str:
@@ -97,12 +87,6 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def normalize_settings(self) -> Settings:
-        self.supabase_url = self.supabase_url.rstrip("/") if self.supabase_url else None
-        requested_backend = self.image_storage_backend.strip().lower()
-        if requested_backend in {"file", "filesystem"}:
-            self.image_storage_backend = "file"
-        elif requested_backend == "supabase" or self.storage_bucket:
-            self.image_storage_backend = "supabase"
         if self.cookie_samesite == "none" and not self.secure_cookies:
             raise ValueError("PNS_COOKIE_SAMESITE=none requires PNS_SECURE_COOKIES=true.")
         return self

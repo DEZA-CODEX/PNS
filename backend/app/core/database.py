@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from functools import lru_cache
 
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+import logging
 
 from app.core.config import database_url_for_asyncpg, get_settings
+from app.core.exceptions import ServiceUnavailableError
+
+logger = logging.getLogger("pns.database")
 
 
 @lru_cache
@@ -37,11 +43,16 @@ def get_session_factory() -> async_sessionmaker[AsyncSession] | None:
 async def get_db_session() -> AsyncIterator[AsyncSession]:
     factory = get_session_factory()
     if factory is None:
-        from app.core.exceptions import ServiceUnavailableError
-
         raise ServiceUnavailableError("The PostgreSQL connection is not configured.")
-    async with factory() as session:
-        yield session
+    try:
+        async with factory() as session:
+            yield session
+    except DBAPIError as error:
+        logger.exception("PostgreSQL operation failed while serving a database request.")
+        raise ServiceUnavailableError(
+            "The PostgreSQL database is unavailable. Check the backend database "
+            "connection and network access."
+        ) from error
 
 
 async def close_database() -> None:

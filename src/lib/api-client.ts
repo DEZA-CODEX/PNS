@@ -51,6 +51,11 @@ export function apiUrl(path: string) {
   return new URL(suffix, `${base.toString().replace(/\/+$/u, "")}/`).toString();
 }
 
+export function apiResourceUrl(url: string) {
+  if (!url.startsWith("/api/v1/")) return url;
+  return apiUrl(url.slice("/api/v1/".length));
+}
+
 export async function apiFetch(path: string, init: ApiRequestInit = {}) {
   const { timeoutMs = 15_000, ...requestInit } = init;
   const url = apiUrl(path);

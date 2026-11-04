@@ -1,0 +1,23 @@
+
+
+
+APP_ENV=development
+FRONTEND_URL=https://literate-orbit-97rj9vv5qjxw3xx7w-3000.app.github.dev
+
+CORS_ORIGINS=https://literate-orbit-97rj9vv5qjxw3xx7w-3000.app.github.dev,http://localhost:3000
+
+
+host=aws-0-ap-southeast-1.pooler.supabase.com
+port=5432
+database=postgres
+user=postgres.jfugjjnyhtzzagpkttgx
+password=Mohanbabu2212@
+
+
+PNS_IMAGE_STORAGE_DIR=../public/uploads
+PNS_SECURE_COOKIES=true
+PNS_COOKIE_SAMESITE=lax
+
+PNS_ALLOWED_HOSTS=localhost,127.0.0.1,testserver,literate-orbit-97rj9vv5qjxw3xx7w-8000.app.github.dev
+# PNS_IMAGE_STORAGE_BUCKET=your-existing-public-image-bucket
+DATABASE_URL=postgresql://postgres:Mohanbabu2212%40@db.jfugjjnyhtzzagpkttgx.supabase.co:5432/postgres?sslmode=require

@@ -19,7 +19,12 @@ def _uuid_param(value: str | UUID | None) -> UUID | None:
 def _image(row: dict[str, Any]) -> dict[str, Any]:
     updated = row.get("updated_at")
     cache_version = str(updated or row["id"])
-    url = str(row.get("public_url") or "")
+    is_database_image = bool(row.get("has_database_content"))
+    url = (
+        f"/api/v1/images/content/{row['id']}"
+        if is_database_image
+        else str(row.get("public_url") or "")
+    )
     if url:
         separator = "&" if "?" in url else "?"
         url = f"{url}{separator}v={''.join(c for c in cache_version if c.isalnum() or c in '_-')}"
@@ -46,6 +51,7 @@ async def list_managed_images(
 ) -> tuple[list[dict[str, Any]], list[str]]:
     statement = """
         SELECT id, category_id, public_url, storage_path, source_type,
+               image_data IS NOT NULL AS has_database_content,
                display_location, display_order, is_active, updated_at
           FROM public.managed_images
          WHERE category_type = :collection AND category_id = :category AND is_active
@@ -83,6 +89,7 @@ async def get_managed_image(
         text(
             """
             SELECT id, category_id, public_url, storage_path, source_type,
+                   image_data IS NOT NULL AS has_database_content,
                    display_location, display_order, is_active, updated_at, created_by
               FROM public.managed_images
              WHERE category_type = :collection AND category_id = :category AND id = :image_id
@@ -126,14 +133,19 @@ async def save_managed_image(
     storage_path: str | None,
     source_type: str,
     created_by: str | None,
+    image_data: bytes | None = None,
+    content_type: str | None = None,
 ) -> dict[str, Any]:
     result = await db.execute(
         text(
             """
             INSERT INTO public.managed_images
-                (category_type, category_id, public_url, storage_path, source_type, created_by)
-            VALUES (:collection, :category, :url, :storage_path, :source_type, :created_by)
+                (category_type, category_id, public_url, storage_path, source_type,
+                 created_by, image_data, content_type)
+            VALUES (:collection, :category, :url, :storage_path, :source_type,
+                    :created_by, :image_data, :content_type)
             RETURNING id, category_id, public_url, storage_path, source_type,
+                      image_data IS NOT NULL AS has_database_content,
                       display_location, display_order, is_active, updated_at
             """
         ),
@@ -144,10 +156,36 @@ async def save_managed_image(
             "storage_path": storage_path,
             "source_type": source_type,
             "created_by": _uuid_param(created_by),
+            "image_data": image_data,
+            "content_type": content_type,
         },
     )
     row = result.mappings().one()
     return _image(dict(row))
+
+
+async def get_managed_image_content(db: AsyncSession, image_id: str) -> dict[str, Any] | None:
+    image_uuid = _uuid_param(image_id)
+    if image_uuid is None:
+        return None
+    result = await db.execute(
+        text(
+            """
+            SELECT image_data, content_type
+              FROM public.managed_images
+             WHERE id = :image_id AND source_type = 'upload'
+               AND is_active AND image_data IS NOT NULL
+             LIMIT 1
+            """
+        ),
+        {"image_id": image_uuid},
+    )
+    row = result.mappings().first()
+    if row is None:
+        return None
+    image = dict(row)
+    image["image_data"] = bytes(image["image_data"])
+    return image
 
 
 async def disable_managed_image(

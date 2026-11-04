@@ -9,24 +9,20 @@ records are created by this migration.
 
 ```text
 Browser -> Nginx -> Next.js pages and assets
-                 -> FastAPI /api/v1 and /uploads
+                 -> FastAPI /api/v1
                     -> Supabase PostgreSQL
-                    -> Supabase Storage (optional, must be configured)
 ```
 
 The browser uses the same-origin `/api/v1` prefix in production. Next.js server rendering verifies
 admin sessions by calling FastAPI with the incoming HttpOnly session cookie. The Next.js app has
 no database client, API route handlers, or private Supabase credentials. Image upload records are
-stored in PostgreSQL; uploaded files use the existing persistent `public/uploads` directory by
-default. FastAPI serves those public files at the existing `/uploads/...` URLs.
+stored in PostgreSQL, including uploaded image bytes.
 
 ## Local development
 
-Create the root `.env` from `.env.example` if needed and create `backend/.env` from
-`backend/.env.example`. Put the Supabase PostgreSQL connection string and any private Supabase
-Storage key in `backend/.env` only; the root `.env` is consumed by Next.js and must contain no
-database credentials or service-role secrets. Do not overwrite an existing `.env` blindly, and do
-not share or commit either private file.
+Configure ignored root `.env` and `backend/.env` directly. Put the PostgreSQL connection string in
+`backend/.env` only; the root `.env` is consumed by Next.js and must contain no database credentials.
+Do not overwrite an existing `.env` blindly, and do not share or commit either private file.
 
 For local development, set `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1` in the root
 `.env` and `CORS_ORIGINS=http://localhost:3000` in `backend/.env`, then run FastAPI:
@@ -36,10 +32,11 @@ cd backend
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r requirements-dev.txt
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-In another terminal, run `npm run dev`. For production deployment on Ubuntu with Nginx and
+In another terminal, run `npm run dev`. Both commands bind to `0.0.0.0`; backend CORS and trusted
+hosts must still be explicitly configured. For production deployment on Ubuntu with Nginx and
 systemd-managed Next.js and FastAPI services, see
 [docs/ubuntu-deployment.md](./docs/ubuntu-deployment.md).
 For detailed frontend/backend URLs, CORS, cookies, and troubleshooting, see
@@ -59,8 +56,8 @@ dependencies are in `backend/requirements.txt`.
 
 ## Database and admin setup
 
-Apply the existing SQL migrations only if they have not already been applied. This migration
-does not reset, reseed, or alter existing data. The checked-in schema provides admin users,
+Apply the existing SQL migrations only if they have not already been applied. The image-content
+migration adds nullable columns and does not reset or delete existing data. The checked-in schema provides admin users,
 Super Admins, roles, groups, permissions, sessions, audit events, managed images, and image
 manifest configuration. No backend table definitions exist for hotel inventory, bookings,
 enquiries, banquet management, or general website content, so no replacement CRUD APIs are
@@ -73,14 +70,16 @@ overwriting an existing account:
 npm run bootstrap:superadmin
 ```
 
-To import existing JSON backup data without replacing existing rows:
+To copy existing uploaded images from the legacy `public/uploads` directory into the database,
+after applying the new image-content migration:
 
 ```sh
-npm run import:legacy-data
+npm run migrate:image-files
 ```
 
-The importer reads `data/admin-auth-store.json` and the path in `PNS_IMAGE_MANIFEST`. It performs
-all database work through Python and inserts only missing records.
+The migration is idempotent and keeps source files in place. Verify that all uploaded images load
+from the API before removing any legacy files. Admin accounts, sessions, image metadata, and
+uploaded image bytes are stored in PostgreSQL; externally hosted image URLs remain references.
 
 ## API and authentication
 
@@ -100,14 +99,10 @@ disabled by default. If enabled, Nginx restricts `/docs` and `/openapi.json` to 
 
 ## Image storage
 
-Uploads preserve the existing room/dining categories, folder layout, URL contract, and 8 MiB
-per-image limit. FastAPI validates the actual image, rejects animated or oversized images, and
-converts supported non-WebP formats. Local uploads persist under `public/uploads` and are served
-through FastAPI; external URLs remain references and are not downloaded or remotely deleted.
-
-The backend includes a Supabase Storage adapter, but no bucket is created or configured here. To
-use an existing public bucket, configure `SUPABASE_URL`, the private
-`SUPABASE_SERVICE_ROLE_KEY`, `PNS_IMAGE_STORAGE_BUCKET`, and `PNS_IMAGE_BACKEND=supabase` on the
-backend only. Do not put database credentials or the service-role key in `NEXT_PUBLIC_*` variables.
-Before scaling across hosts, use shared object storage rather than the single-host
-`public/uploads` directory.
+Uploads preserve the existing room/dining categories and 8 MiB per-image limit. FastAPI validates
+the image, rejects animated or oversized inputs, converts supported non-WebP formats, and stores
+the resulting bytes in the PostgreSQL `managed_images` table. The image-content API serves these
+bytes. External URLs remain references and are not fetched. Apply
+`supabase/migrations/20261104_managed_image_database_content.sql` before starting the updated
+backend. Do not use wildcard CORS with credentialed admin cookies; set exact frontend origins in
+`CORS_ORIGINS`.

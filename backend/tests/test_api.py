@@ -5,6 +5,7 @@ import base64
 import hashlib
 import io
 import json
+from contextlib import asynccontextmanager
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -13,26 +14,34 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 from pydantic import ValidationError
+from sqlalchemy.exc import OperationalError
 
 from app.core.admin_types import AdminContext
 from app.core.config import Settings, database_url_for_asyncpg
 from app.core.database import get_db_session
+from app.core.exceptions import ServiceUnavailableError
 from app.core.responses import JSONResponse
 from app.core.security import hash_password, verify_password
-from app.main import app
+from app.cli import _legacy_image_path
+from app.main import app, lifespan
 from app.services.image_service import (
-    ImageStorage,
     _process_image,
     add_external_image,
+    add_uploaded_image,
     validate_collection_category,
 )
 
 
 @pytest.fixture
-def client() -> Iterator[TestClient]:
+def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     async def no_database() -> Iterator[object]:
         yield object()
 
+    @asynccontextmanager
+    async def no_startup_database(_app):
+        yield
+
+    monkeypatch.setattr(app.router, "lifespan_context", no_startup_database)
     app.dependency_overrides[get_db_session] = no_database
     with TestClient(app) as test_client:
         yield test_client
@@ -49,6 +58,64 @@ def test_health_endpoint(client: TestClient) -> None:
     response = client.get("/health/live")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_startup_continues_when_database_is_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import logging
+
+    import app.main as main_module
+
+    class UnreachableEngine:
+        def connect(self) -> UnreachableEngine:
+            return self
+
+        async def __aenter__(self) -> UnreachableEngine:
+            raise OperationalError("SELECT 1", {}, OSError("network unreachable"))
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    async def noop() -> None:
+        return None
+
+    monkeypatch.setattr(main_module, "get_engine", lambda: UnreachableEngine())
+    monkeypatch.setattr(main_module, "close_database", noop)
+    monkeypatch.setattr(main_module.login_rate_limiter, "close", noop)
+
+    async def start_application() -> None:
+        async with lifespan(main_module.app):
+            pass
+
+    with caplog.at_level(logging.ERROR, logger="pns.backend"):
+        asyncio.run(start_application())
+
+    assert "API will start in degraded mode" in caplog.text
+
+
+def test_database_dependency_returns_503_when_connection_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.core.database as database_module
+
+    class UnreachableSessionFactory:
+        async def __aenter__(self) -> object:
+            raise OperationalError("SELECT 1", {}, OSError("network unreachable"))
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr(
+        database_module, "get_session_factory", lambda: UnreachableSessionFactory
+    )
+
+    async def get_session() -> None:
+        await anext(database_module.get_db_session())
+
+    with pytest.raises(ServiceUnavailableError, match="database is unavailable"):
+        asyncio.run(get_session())
 
 
 def test_cors_preflight_allows_configured_frontend_origin(client: TestClient) -> None:
@@ -76,20 +143,8 @@ def test_cors_origins_parse_csv_and_reject_wildcard() -> None:
     ]
     with pytest.raises(ValidationError, match="cannot include"):
         Settings(_env_file=None, cors_origins="*")
-
-
-def test_supabase_project_settings_accept_api_keys_and_jwks_url() -> None:
-    settings = Settings(
-        _env_file=None,
-        supabase_url="https://project.example",
-        supabase_publishable_key="publishable-test-key",
-        supabase_secret_key="secret-test-key",
-        supabase_jwks_url="https://project.example/auth/v1/.well-known/jwks.json",
-    )
-    assert settings.supabase_url == "https://project.example"
-    assert settings.supabase_publishable_key == "publishable-test-key"
-    assert settings.supabase_service_key == "secret-test-key"
-    assert settings.supabase_jwks_url == "https://project.example/auth/v1/.well-known/jwks.json"
+    with pytest.raises(ValidationError, match="exact hostnames"):
+        Settings(_env_file=None, allowed_hosts="*.example.com")
 
 
 def test_login_cookie_is_used_for_session_verification(
@@ -303,26 +358,63 @@ def test_external_image_creation_returns_database_record(
     assert image == {"id": "image-id", "url": "https://images.example/room.webp"}
 
 
-def test_supabase_storage_uses_private_service_role_header(
+def test_uploaded_image_bytes_are_saved_in_database(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
 ) -> None:
-    settings = Settings(
-        database_url=None,
-        redis_url=None,
-        supabase_url="https://project.example",
-        supabase_service_key="private-test-key",
-        storage_bucket="hotel-images",
-        image_storage_dir="/tmp/images",
-        image_storage_backend="supabase",
-        session_cookie_name="pns_admin_session",
-        secure_cookies=True,
-        api_docs_enabled=False,
-        cors_origins=(),
-        allowed_hosts=("testserver",),
-        max_upload_bytes=8 * 1024 * 1024,
-        max_image_pixels=64_000_000,
-    )
+    settings = Settings(_env_file=None, image_storage_dir=str(tmp_path))
     monkeypatch.setattr("app.services.image_service.get_settings", lambda: settings)
-    headers = ImageStorage()._headers()
-    assert headers["Authorization"] == "Bearer private-test-key"
-    assert headers["apikey"] == "private-test-key"
+    saved: dict[str, object] = {}
+
+    async def save_image(*_args: object, **kwargs: object) -> dict[str, object]:
+        saved.update(kwargs)
+        return {
+            "id": "image-id",
+            "url": "/api/v1/images/content/image-id",
+            "filename": str(kwargs["storage_path"]).rsplit("/", 1)[-1],
+        }
+
+    monkeypatch.setattr("app.services.image_service.save_managed_image", save_image)
+    image = asyncio.run(
+        add_uploaded_image(
+            object(), "room", "vajra", "room.png", _image_bytes(), "admin-id"
+        )
+    )
+
+    assert saved["source_type"] == "upload"
+    assert saved["content_type"] == "image/webp"
+    assert saved["image_data"]
+    assert image["url"] == "/api/v1/images/content/image-id"
+    assert not list(tmp_path.iterdir())
+
+
+def test_legacy_image_migration_resolves_only_paths_inside_upload_root(tmp_path) -> None:
+    path = _legacy_image_path(tmp_path, "uploads/room/vajra/image.webp")
+    assert path == tmp_path.resolve() / "room/vajra/image.webp"
+    with pytest.raises(RuntimeError, match="Unsafe legacy image path"):
+        _legacy_image_path(tmp_path, "uploads/../../outside.webp")
+
+
+def test_image_content_endpoint_serves_database_bytes(client: TestClient) -> None:
+    image_data = b"database image bytes"
+
+    class Result:
+        def mappings(self):
+            return self
+
+        def first(self):
+            return {"image_data": memoryview(image_data), "content_type": "image/webp"}
+
+    class Session:
+        async def execute(self, *_args: object, **_kwargs: object) -> Result:
+            return Result()
+
+    async def database_session() -> Iterator[object]:
+        yield Session()
+
+    app.dependency_overrides[get_db_session] = database_session
+    response = client.get("/api/v1/images/content/1b671a64-40d5-491e-99b0-da01ff1f3341")
+    assert response.status_code == 200
+    assert response.content == image_data
+    assert response.headers["content-type"] == "image/webp"
+    assert response.headers["x-content-type-options"] == "nosniff"

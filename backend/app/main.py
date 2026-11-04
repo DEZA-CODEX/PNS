@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
-from starlette.staticfiles import StaticFiles
+from sqlalchemy.exc import DBAPIError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.v1.router import router as v1_router
@@ -29,9 +29,18 @@ async def lifespan(_: FastAPI):
     if engine is None:
         logger.warning("DATABASE_URL is not configured; database routes will return 503.")
     else:
-        async with engine.connect() as connection:
-            await connection.execute(text("SELECT 1"))
-        logger.info("PostgreSQL connection pool is ready.")
+        try:
+            async with engine.connect() as connection:
+                await connection.execute(text("SELECT 1"))
+        except DBAPIError:
+            logger.exception(
+                "PostgreSQL is unreachable during startup. The API will start in "
+                "degraded mode; database routes will return 503. If this environment "
+                "does not support IPv6, use the Supabase session pooler connection "
+                "string from the project dashboard."
+            )
+        else:
+            logger.info("PostgreSQL connection pool is ready.")
     yield
     await login_rate_limiter.close()
     await close_database()
@@ -92,12 +101,6 @@ async def handle_validation_error(
 
 
 app.include_router(v1_router, prefix="/api/v1")
-if settings.image_storage_backend == "file":
-    app.mount(
-        "/uploads",
-        StaticFiles(directory=settings.image_storage_dir, check_dir=False),
-        name="uploads",
-    )
 
 
 @app.get("/health/live", include_in_schema=False)

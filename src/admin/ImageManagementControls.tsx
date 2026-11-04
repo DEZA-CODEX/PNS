@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, apiResourceUrl } from "@/lib/api-client";
 import { getBundledImageRecords } from "@/services/roomImageRepository";
 
 export type ManagedImageRecord = {
@@ -27,6 +27,7 @@ function notifyManagedImagesChanged(collection: "room" | "dining") {
 }
 
 function safeImageSource(value: string) {
+  value = apiResourceUrl(value);
   if ((value.startsWith("/") && !value.startsWith("//")) || value.startsWith("blob:")) {
     return value;
   }
@@ -372,7 +373,12 @@ export function ImageManagementControls({
                 <strong>Image URL:</strong> {image.url}
               </p>
               <p className="break-all">
-                <strong>Storage path:</strong> {image.path ?? "External URL"}
+                <strong>
+                  {image.sourceType === "upload" ? "Database filename:" : "Image path:"}
+                </strong>{" "}
+                {image.sourceType === "upload"
+                  ? (image.filename ?? "Stored in PostgreSQL")
+                  : (image.path ?? "External URL")}
               </p>
               <label className="grid gap-1 text-xs">
                 Display location

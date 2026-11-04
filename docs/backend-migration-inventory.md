@@ -63,16 +63,16 @@ client, database query, database credential, or database-dependent Next.js API r
 
 The Python backend is under `backend/app/`:
 
-- `main.py` configures HTTP error responses, host/CORS middleware, health checks, and optional
-  local-upload serving.
+- `main.py` configures HTTP error responses, host/CORS middleware, and health checks.
 - `api/v1/admin.py` implements login/logout/session verification, users, Super Admin creation,
   groups, memberships, permissions, audit events, and room/dining image administration.
-- `api/v1/images.py` implements public managed-image listing.
+- `api/v1/images.py` implements public managed-image listing and database-backed image-content
+  serving.
 - `core/` contains settings, PostgreSQL connection/session management, password/session security,
   RBAC dependencies, error types, and login rate limiting.
 - `repositories/` contains parameterized PostgreSQL access for the existing schema.
-- `services/` contains admin behavior and image validation/storage operations.
-- `cli.py` provides idempotent Super Admin bootstrap and insert-only legacy JSON import commands.
+- `services/` contains admin behavior and image validation/database persistence operations.
+- `cli.py` provides idempotent Super Admin bootstrap and legacy image-file migration commands.
 - `tests/test_api.py` covers route contracts, authentication gating, password formats, image
   validation, PostgreSQL URL normalization, and storage adapter configuration.
 
@@ -85,7 +85,9 @@ without it, the process-local limiter is used.
 Only the checked-in migrations are available as schema evidence; a live schema export was not
 available during the repository audit. Existing schema definitions are in
 `supabase/migrations/20261021_admin_rbac.sql` and
-`supabase/migrations/20261030_image_manifest_config.sql`. They define:
+`supabase/migrations/20261030_image_manifest_config.sql`. The additive
+`20261104_managed_image_database_content.sql` migration adds uploaded image bytes and content type
+to `managed_images`. The existing migrations define:
 
 - `admin_user_status` (`active`, `disabled`) and `permission_effect` (`allow`, `deny`) enums.
 - `super_admins`, `admin_roles`, `admin_users`, `admin_groups`, `admin_permissions`.
@@ -94,18 +96,14 @@ available during the repository audit. Existing schema definitions are in
 - Existing foreign keys, uniqueness constraints, indexes, update function/triggers, and RLS
   configuration as specified by those migrations.
 
-No additional application tables are created. The FastAPI backend uses `DATABASE_URL` (or
+No existing application tables are dropped. The FastAPI backend uses `DATABASE_URL` (or
 `SUPABASE_DB_URL`) as a private PostgreSQL connection and does not use Supabase's REST database
 client. Database credentials belong only in `backend/.env`; the Next.js frontend does not receive
 them.
 
-**Live database connectivity was not verified:** the private backend environment contains the
-existing Supabase URL/storage key but no `DATABASE_URL` or `SUPABASE_DB_URL`; neither the root
-`.env` nor the current process provides either database variable. No credential value was read or
-printed.
-Backend route and validation tests therefore use a test database-dependency override; live SQL
-queries, transactions, bootstrap, and legacy import still require operator-supplied runtime
-configuration.
+**Live database connectivity was not verified.** Local route and validation tests use a database
+dependency override; live SQL, image-file migration, and admin login require network access to the
+configured Supabase PostgreSQL endpoint.
 
 ## Authentication and authorization
 
@@ -122,21 +120,20 @@ configuration.
 - Password reset remains simulated and account self-registration remains disabled, matching the
   existing behavior; neither is represented as a working backend feature.
 
-## Image/file storage
+## Image storage
 
-- Existing `managed_images` rows remain the metadata source; no migration changes rows.
+- Existing `managed_images` rows remain the metadata source; the image-content migration only
+  adds nullable columns.
 - Existing bundled room/dining assets remain in the frontend and are combined with FastAPI
   managed-image results. Hidden bundled IDs remain represented in the existing managed-image
   table.
 - Upload limits and validation match the existing workflow: 8 MiB per file, supported detected
   image formats, animation rejection, 64-million-pixel limit, and WebP output.
-- Local files retain `/uploads/...` URLs and the `uploads/<collection>/<category>/` layout.
-  FastAPI serves `/uploads` from the existing `public/uploads` directory for single-host
-  persistence.
-- Upload compensation restores storage if a database write or deletion transaction fails.
-- A Supabase Storage adapter is implemented but not enabled by default. No bucket is created and
-  no existing file is transferred. A pre-existing bucket and explicit operator configuration
-  are required before switching to it. Local disk is not shared across hosts.
+- New uploads are validated and converted to WebP, then their bytes and metadata are stored in
+  PostgreSQL. The public image-content endpoint reads from `managed_images.image_data`.
+- External image URLs remain references and are not fetched by the backend.
+- `npm run migrate:image-files` copies legacy uploaded files into matching database rows and
+  retains local source files until the operator verifies the migration.
 
 ## Deployment and migration status
 
@@ -151,10 +148,10 @@ loopback when enabled.
 | Existing frontend and admin image/RBAC consumers reconnected | Implemented |
 | Next.js database routes, Supabase database helper, and direct-query Node scripts removed | Implemented |
 | Password compatibility and database-backed session logic | Implemented; live DB verification blocked |
-| Local upload preservation and optional Supabase Storage adapter | Implemented; bucket integration not configured |
+| PostgreSQL image bytes | Implemented after applying the additive image-content migration |
 | One-server Ubuntu/systemd/Nginx deployment | Documented in `docs/ubuntu-deployment.md`; runtime verification is environment-dependent |
 | Existing PostgreSQL schema/data integrity | No schema or record changes made; live DB tests blocked |
 | Public/admin browser workflows and actual image synchronization | Not end-to-end verified without the configured database and running deployment |
 
-Do not treat the migration as production-verified until `DATABASE_URL` is configured and the
-backend is exercised against the existing Supabase schema and records.
+Do not treat the migration as production-verified until `DATABASE_URL` is reachable and the image
+migration and admin workflows are exercised against the existing Supabase schema and records.
