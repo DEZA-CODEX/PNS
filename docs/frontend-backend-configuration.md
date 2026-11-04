@@ -12,7 +12,12 @@ private values must never be copied into the frontend environment.
 | `APP_ENV` | FastAPI | Environment name; `production` defaults session cookies to Secure. |
 | `FRONTEND_URL` | FastAPI | Canonical frontend origin for deployment documentation and configuration. |
 | `CORS_ORIGINS` | FastAPI | Comma-separated exact browser origins allowed to call the API with credentials. |
+| `PNS_ALLOWED_HOSTS` | FastAPI | Comma-separated API hostnames accepted by FastAPI's host validation. |
 | `DATABASE_URL` | FastAPI only | Existing Supabase PostgreSQL connection string. Leave empty until configured. |
+| `SUPABASE_URL` | FastAPI only | Supabase project URL used for storage integration. |
+| `SUPABASE_PUBLISHABLE_KEY` | FastAPI only | Supabase publishable API key; not a database credential. |
+| `SUPABASE_SECRET_KEY` | FastAPI only | Server-only Supabase secret API key; never expose it to frontend code. |
+| `SUPABASE_JWKS_URL` | FastAPI only | Supabase JWKS endpoint URL. |
 | `PNS_SECURE_COOKIES` | FastAPI | Explicitly overrides the Secure cookie flag. Use `true` over HTTPS. |
 | `PNS_COOKIE_SAMESITE` | FastAPI | `lax` by default; use `none` only for cross-site HTTPS deployments. |
 | `PNS_COOKIE_DOMAIN` | FastAPI | Optional cookie domain, e.g. a shared parent domain for frontend/API subdomains. |
@@ -61,7 +66,9 @@ PNS_SECURE_COOKIES=true
 ```
 
 Replace example values with the deployment's real URLs and the existing Supabase connection
-string. Keep the database URL only in `backend/.env`. `CORS_ORIGINS` accepts a comma-separated
+string. Keep the database URL and server-only Supabase key only in `backend/.env`. Supabase
+project/API keys are not a PostgreSQL `DATABASE_URL`; keep the existing database connection
+string unless you have a replacement PostgreSQL connection URL. `CORS_ORIGINS` accepts a comma-separated
 list for multiple exact origins. Wildcard origins are rejected because credentialed CORS cannot
 safely use `*`.
 
@@ -97,5 +104,10 @@ possible.
 - **HTTP 503 or `/health/ready` reports database unavailable:** verify `DATABASE_URL` in
   `backend/.env` refers to the existing Supabase database and restart FastAPI. `/health/live`
   checks process health only and does not require the database.
-- **Network failure or 404:** verify FastAPI is reachable at the configured API URL and that any
-  reverse proxy forwards `/api/v1/` unchanged.
+- **Network failure:** the shared frontend API client logs “Backend was not connected” and shows
+  a notification when a request cannot reach FastAPI or times out. Verify
+  `NEXT_PUBLIC_API_BASE_URL` points to the reachable API, the API hostname is included in
+  `PNS_ALLOWED_HOSTS`, and the frontend origin is included in `CORS_ORIGINS`; restart FastAPI
+  after backend environment changes.
+- **404:** verify the API URL ends in `/api/v1` and that any reverse proxy forwards `/api/v1/`
+  unchanged. HTTP responses, including 404s, are not treated as network disconnections.

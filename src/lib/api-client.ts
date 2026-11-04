@@ -1,3 +1,5 @@
+import { toast } from "sonner";
+
 export type ApiRequestInit = RequestInit & { timeoutMs?: number };
 
 export class ApiConfigurationError extends Error {
@@ -49,12 +51,24 @@ export function apiUrl(path: string) {
   return new URL(suffix, `${base.toString().replace(/\/+$/u, "")}/`).toString();
 }
 
-export function apiFetch(path: string, init: ApiRequestInit = {}) {
+export async function apiFetch(path: string, init: ApiRequestInit = {}) {
   const { timeoutMs = 15_000, ...requestInit } = init;
-  return fetch(apiUrl(path), {
-    ...requestInit,
-    credentials: "include",
-    cache: requestInit.cache ?? "no-store",
-    signal: requestInit.signal ?? AbortSignal.timeout(timeoutMs),
-  });
+  const url = apiUrl(path);
+  try {
+    return await fetch(url, {
+      ...requestInit,
+      credentials: "include",
+      cache: requestInit.cache ?? "no-store",
+      signal: requestInit.signal ?? AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    if (error instanceof TypeError || (error instanceof Error && error.name === "TimeoutError")) {
+      const message = `Backend was not connected or did not respond while requesting ${new URL(url).pathname}.`;
+      console.error(message, error);
+      if (typeof window !== "undefined") {
+        toast.error(message, { id: "backend-not-connected" });
+      }
+    }
+    throw error;
+  }
 }

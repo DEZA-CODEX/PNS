@@ -78,6 +78,20 @@ def test_cors_origins_parse_csv_and_reject_wildcard() -> None:
         Settings(_env_file=None, cors_origins="*")
 
 
+def test_supabase_project_settings_accept_api_keys_and_jwks_url() -> None:
+    settings = Settings(
+        _env_file=None,
+        supabase_url="https://project.example",
+        supabase_publishable_key="publishable-test-key",
+        supabase_secret_key="secret-test-key",
+        supabase_jwks_url="https://project.example/auth/v1/.well-known/jwks.json",
+    )
+    assert settings.supabase_url == "https://project.example"
+    assert settings.supabase_publishable_key == "publishable-test-key"
+    assert settings.supabase_service_key == "secret-test-key"
+    assert settings.supabase_jwks_url == "https://project.example/auth/v1/.well-known/jwks.json"
+
+
 def test_login_cookie_is_used_for_session_verification(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

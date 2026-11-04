@@ -26,12 +26,16 @@ class Settings(BaseSettings):
     )
     redis_url: str | None = Field(default=None, validation_alias="REDIS_URL")
     supabase_url: str | None = Field(default=None, validation_alias="SUPABASE_URL")
+    supabase_publishable_key: str | None = Field(
+        default=None, validation_alias="SUPABASE_PUBLISHABLE_KEY"
+    )
     supabase_service_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices(
             "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE"
         ),
     )
+    supabase_jwks_url: str | None = Field(default=None, validation_alias="SUPABASE_JWKS_URL")
     storage_bucket: str | None = Field(
         default=None, validation_alias="PNS_IMAGE_STORAGE_BUCKET"
     )
