@@ -8,7 +8,7 @@ private values must never be copied into the frontend environment.
 
 | Variable | Application | Purpose |
 |---|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | Next.js | Absolute HTTP(S) URL to the API root, including `/api/v1`. Required at build and runtime. |
+| `NEXT_PUBLIC_API_BASE_URL` | Next.js | Base URL for FastAPI, with or without `/api/v1`. Required at build and runtime. |
 | `APP_ENV` | FastAPI | Environment name; `production` defaults session cookies to Secure. |
 | `FRONTEND_URL` | FastAPI | Canonical frontend origin for deployment documentation and configuration. |
 | `CORS_ORIGINS` | FastAPI | Comma-separated exact browser origins allowed to call the API with credentials. |
@@ -27,7 +27,7 @@ Configure the ignored frontend root `.env` and `backend/.env` directly. Keep dat
 credentials only in `backend/.env`.
 
 ```dotenv
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
 
 Configure `backend/.env`:
@@ -47,10 +47,11 @@ with no path. Do not use wildcard CORS with credentials.
 
 ## Production and changing API URLs
 
-Set `NEXT_PUBLIC_API_BASE_URL` in the frontend build environment to the API root reachable by
-browsers and by the Next.js server. For a same-origin Nginx deployment, use the public site URL
-with `/api/v1`, for example `https://your-domain.example/api/v1`. For separate subdomains, use the
-public API origin, e.g. `https://api.your-domain.example/api/v1`.
+Set `NEXT_PUBLIC_API_BASE_URL` in the frontend build environment to the FastAPI URL reachable by
+browsers and by the Next.js server. The frontend adds `/api/v1` if it is not already present.
+For a same-origin Nginx deployment, use the public site URL, for example
+`https://your-domain.example`. For separate subdomains, use the public API origin, e.g.
+`https://api.your-domain.example`.
 
 Set `APP_ENV=production`, `FRONTEND_URL`, and `CORS_ORIGINS` in `backend/.env`. Example for a
 frontend at `https://www.your-domain.example`:
@@ -90,8 +91,8 @@ possible.
 
 ## Troubleshooting
 
-- **API configuration error in the browser/server:** ensure `NEXT_PUBLIC_API_BASE_URL` is set to
-  an absolute `http://` or `https://` URL ending in `/api/v1`; rebuild Next.js after changes.
+- **Requests go to the wrong API path:** verify `NEXT_PUBLIC_API_BASE_URL` points to the FastAPI
+  host; the frontend adds `/api/v1` if it is missing. Rebuild Next.js after changes.
 - **CORS/preflight error:** check the request's exact `Origin` against comma-separated
   `CORS_ORIGINS`; include scheme and port, omit paths, then restart FastAPI.
 - **Login works but later requests are unauthenticated:** confirm browser cookies are enabled,

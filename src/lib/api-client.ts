@@ -9,46 +9,22 @@ export class ApiConfigurationError extends Error {
   }
 }
 
-function apiBaseUrl(): URL {
+function apiBaseUrl(): string {
   const configured = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (!configured) {
     throw new ApiConfigurationError(
-      "NEXT_PUBLIC_API_BASE_URL is not configured. Set it to the FastAPI /api/v1 URL.",
+      "NEXT_PUBLIC_API_BASE_URL is not configured. Set it to the FastAPI URL.",
     );
   }
 
-  let url: URL;
-  try {
-    url = new URL(configured);
-  } catch {
-    throw new ApiConfigurationError(
-      "NEXT_PUBLIC_API_BASE_URL must be an absolute HTTP or HTTPS URL.",
-    );
-  }
-  if (
-    !["http:", "https:"].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  ) {
-    throw new ApiConfigurationError(
-      "NEXT_PUBLIC_API_BASE_URL must be an HTTP or HTTPS URL without credentials, query, or fragment.",
-    );
-  }
-  url.pathname = url.pathname.replace(/\/+$/u, "");
-  if (!url.pathname.endsWith("/api/v1")) {
-    throw new ApiConfigurationError(
-      "NEXT_PUBLIC_API_BASE_URL must point to the FastAPI API root and end in /api/v1.",
-    );
-  }
-  return url;
+  const base = configured.replace(/\/+$/u, "");
+  return base.endsWith("/api/v1") ? base : `${base}/api/v1`;
 }
 
 export function apiUrl(path: string) {
   const base = apiBaseUrl();
   const suffix = path.replace(/^\/+/, "");
-  return new URL(suffix, `${base.toString().replace(/\/+$/u, "")}/`).toString();
+  return `${base}/${suffix}`;
 }
 
 export function apiResourceUrl(url: string) {
@@ -68,7 +44,7 @@ export async function apiFetch(path: string, init: ApiRequestInit = {}) {
     });
   } catch (error) {
     if (error instanceof TypeError || (error instanceof Error && error.name === "TimeoutError")) {
-      const message = `Backend was not connected or did not respond while requesting ${new URL(url).pathname}.`;
+      const message = `Backend was not connected or did not respond while requesting ${path}.`;
       console.error(message, error);
       if (typeof window !== "undefined") {
         toast.error(message, { id: "backend-not-connected" });
