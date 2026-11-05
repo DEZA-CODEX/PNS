@@ -80,13 +80,13 @@
     "@types/react-dom": "^19.2.0",
     "@types/three": "^0.185.4",
     "eslint": "^9.32.0",
-    "eslint-config-next": "^16.4.2",
+    "eslint-config-next": "^15.5.29",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
     "eslint-plugin-react-hooks": "^5.2.0",
     "globals": "^15.15.0",
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.56.0"
+    "typescript-eslint": "^8.36.0"
   }
 }
