@@ -19,28 +19,10 @@ function apiBaseUrl(): URL {
     );
   }
 
-  let base: URL;
-  try {
-    base = new URL(configured);
-  } catch {
-    throw new ApiConfigurationError(
-      "NEXT_PUBLIC_API_BASE_URL must be an absolute backend URL, such as http://localhost:8000.",
-    );
-  }
-
-  if (
-    !["http:", "https:"].includes(base.protocol) ||
-    !base.hostname ||
-    base.username ||
-    base.password ||
-    base.search ||
-    base.hash ||
-    !["", "/", "/api", "/api/v1"].includes(base.pathname.replace(/\/+$/u, ""))
-  ) {
-    throw new ApiConfigurationError(
-      "NEXT_PUBLIC_API_BASE_URL must be an HTTP(S) backend origin, optionally ending in /api or /api/v1.",
-    );
-  }
+  const base = new URL(
+    configured,
+    typeof window === "undefined" ? "http://localhost" : window.location.origin,
+  );
 
   base.pathname = `${API_PREFIX}/`;
   return base;

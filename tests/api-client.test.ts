@@ -44,12 +44,15 @@ test("normalizes trailing slashes and duplicate API prefixes", () => {
   );
 });
 
-test("reports missing or invalid backend configuration clearly", () => {
+test("reports missing backend configuration and accepts relative URLs", () => {
   setApiUrl();
   assert.throws(() => apiUrl("/admin/auth/login"), ApiConfigurationError);
 
   setApiUrl("backend.vercel.app");
-  assert.throws(() => apiUrl("/admin/auth/login"), ApiConfigurationError);
+  assert.equal(
+    apiUrl("/admin/auth/login"),
+    "http://localhost/api/v1/admin/auth/login",
+  );
 });
 
 test("posts login to an absolute backend URL with credentials included", async () => {
