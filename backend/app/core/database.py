@@ -26,9 +26,9 @@ def get_engine() -> AsyncEngine | None:
     return create_async_engine(
         database_url_for_asyncpg(raw_url),
         pool_pre_ping=True,
-        pool_size=5,
-        max_overflow=10,
-        pool_recycle=1800,
+        pool_size=1,
+        max_overflow=0,
+        pool_recycle=500,
         connect_args={"statement_cache_size": 0},
     )
 
