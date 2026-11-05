@@ -17,13 +17,13 @@ from pydantic import ValidationError
 from sqlalchemy.exc import OperationalError
 
 from app.core.admin_types import AdminContext
-from app.core.config import Settings, database_url_for_asyncpg
+from app.core.config import Settings, database_url_for_asyncpg, get_settings
 from app.core.database import get_db_session
 from app.core.exceptions import ServiceUnavailableError
 from app.core.responses import JSONResponse
 from app.core.security import hash_password, verify_password
 from app.cli import _legacy_image_path
-from app.main import app, lifespan
+from app.main import app, fastapi_app, lifespan
 from app.services.image_service import (
     _process_image,
     add_external_image,
@@ -41,11 +41,11 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     async def no_startup_database(_app):
         yield
 
-    monkeypatch.setattr(app.router, "lifespan_context", no_startup_database)
-    app.dependency_overrides[get_db_session] = no_database
-    with TestClient(app) as test_client:
+    monkeypatch.setattr(fastapi_app.router, "lifespan_context", no_startup_database)
+    fastapi_app.dependency_overrides[get_db_session] = no_database
+    with TestClient(app, base_url="https://testserver") as test_client:
         yield test_client
-    app.dependency_overrides.clear()
+    fastapi_app.dependency_overrides.clear()
 
 
 def _image_bytes(image_format: str = "PNG") -> bytes:
@@ -56,6 +56,12 @@ def _image_bytes(image_format: str = "PNG") -> bytes:
 
 def test_health_endpoint(client: TestClient) -> None:
     response = client.get("/health/live")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_api_health_endpoint(client: TestClient) -> None:
+    response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
@@ -124,12 +130,40 @@ def test_cors_preflight_allows_configured_frontend_origin(client: TestClient) ->
         headers={
             "Origin": "http://localhost:3000",
             "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "content-type",
+            "Access-Control-Request-Headers": "authorization,content-type",
         },
     )
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
     assert response.headers["access-control-allow-credentials"] == "true"
+    assert "authorization" in response.headers["access-control-allow-headers"].lower()
+
+
+def test_cors_rejects_unconfigured_origin_and_allows_credentials_on_errors(
+    client: TestClient,
+) -> None:
+    rejected = client.options(
+        "/api/v1/admin/auth/login",
+        headers={
+            "Origin": "https://unconfigured.example",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert rejected.status_code == 400
+    assert "access-control-allow-origin" not in rejected.headers
+
+    error = client.get(
+        "/api/v1/admin/users",
+        headers={"Origin": "http://localhost:3000"},
+    )
+    assert error.status_code == 401
+    assert error.headers["access-control-allow-origin"] == "http://localhost:3000"
+    assert error.headers["access-control-allow-credentials"] == "true"
+
+
+def test_trusted_host_rejects_unconfigured_hostname(client: TestClient) -> None:
+    response = client.get("/api/health", headers={"Host": "unconfigured.example"})
+    assert response.status_code == 400
 
 
 def test_cors_origins_parse_csv_and_reject_wildcard() -> None:
@@ -141,10 +175,28 @@ def test_cors_origins_parse_csv_and_reject_wildcard() -> None:
         "https://pns.example",
         "https://admin.pns.example",
     ]
+    normalized = Settings(
+        _env_file=None,
+        frontend_url="https://pns.example/",
+        cors_origins="https://pns.example/, http://localhost:3000/",
+        allowed_hosts=" PNS.EXAMPLE., localhost ",
+    )
+    assert normalized.frontend_url == "https://pns.example"
+    assert normalized.cors_origins == [
+        "https://pns.example",
+        "http://localhost:3000",
+    ]
+    assert normalized.allowed_hosts == ["pns.example", "localhost"]
     with pytest.raises(ValidationError, match="cannot include"):
         Settings(_env_file=None, cors_origins="*")
     with pytest.raises(ValidationError, match="exact hostnames"):
         Settings(_env_file=None, allowed_hosts="*.example.com")
+    with pytest.raises(ValidationError, match="Origins"):
+        Settings(_env_file=None, cors_origins="https://pns.example/path")
+    with pytest.raises(ValidationError, match="hostnames only"):
+        Settings(_env_file=None, allowed_hosts="https://pns.example")
+    with pytest.raises(ValidationError, match="unspecified bind addresses"):
+        Settings(_env_file=None, allowed_hosts="0.0.0.0")
 
 
 def test_login_cookie_is_used_for_session_verification(
@@ -168,7 +220,10 @@ def test_login_cookie_is_used_for_session_verification(
             "roleName": "Super Admin",
         }
 
-    async def get_context(*_args: object) -> AdminContext:
+    session_tokens: list[str | None] = []
+
+    async def get_context(_db: object, token: str | None, *_args: object) -> AdminContext:
+        session_tokens.append(token)
         return AdminContext(
             user={"id": "admin-id", "email": "admin@example.com"},
             permissions=frozenset({"users.read"}),
@@ -188,12 +243,15 @@ def test_login_cookie_is_used_for_session_verification(
     set_cookie = login_response.headers["set-cookie"]
     assert "pns_admin_session=" in set_cookie
     assert "HttpOnly" in set_cookie
-    assert "SameSite=lax" in set_cookie
+    assert f"SameSite={get_settings().cookie_samesite}" in set_cookie
+    if get_settings().secure_cookies:
+        assert "Secure" in set_cookie
 
     session_response = client.get("/api/v1/admin/auth/me")
     assert session_response.status_code == 200
     assert session_response.json()["authenticated"] is True
     assert session_response.json()["permissions"] == ["users.read"]
+    assert session_tokens == ["session-token"]
 
 
 def test_production_cookie_configuration_requires_secure_for_cross_site(
@@ -225,7 +283,7 @@ def test_production_cookie_configuration_requires_secure_for_cross_site(
 def test_all_existing_api_contracts_are_registered() -> None:
     route_methods = {
         (path, method.upper())
-        for path, path_item in app.openapi()["paths"].items()
+        for path, path_item in fastapi_app.openapi()["paths"].items()
         for method in path_item
         if method in {"get", "post", "put", "patch", "delete"}
     }
@@ -412,7 +470,7 @@ def test_image_content_endpoint_serves_database_bytes(client: TestClient) -> Non
     async def database_session() -> Iterator[object]:
         yield Session()
 
-    app.dependency_overrides[get_db_session] = database_session
+    fastapi_app.dependency_overrides[get_db_session] = database_session
     response = client.get("/api/v1/images/content/1b671a64-40d5-491e-99b0-da01ff1f3341")
     assert response.status_code == 200
     assert response.content == image_data

@@ -1,22 +1,23 @@
 # Frontend and FastAPI configuration
 
-The Next.js app uses `NEXT_PUBLIC_API_BASE_URL` for all browser requests to FastAPI and its
-server-rendered admin-session check. FastAPI reads its own `.env`; database credentials and other
-private values must never be copied into the frontend environment.
+The Next.js app uses `NEXT_PUBLIC_API_BASE_URL` for all browser requests to FastAPI, including
+admin session verification. FastAPI reads its own `.env`; database credentials and other private
+values must never be copied into the frontend environment.
 
 ## Environment variables
 
-| Variable | Application | Purpose |
-|---|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | Next.js | Base URL for FastAPI, with or without `/api/v1`. Required at build and runtime. |
-| `APP_ENV` | FastAPI | Environment name; `production` defaults session cookies to Secure. |
-| `FRONTEND_URL` | FastAPI | Canonical frontend origin for deployment documentation and configuration. |
-| `CORS_ORIGINS` | FastAPI | Comma-separated exact browser origins allowed to call the API with credentials. |
-| `PNS_ALLOWED_HOSTS` | FastAPI | Comma-separated API hostnames accepted by FastAPI's host validation. |
-| `DATABASE_URL` | FastAPI only | PostgreSQL connection string for the existing Supabase database. |
-| `PNS_SECURE_COOKIES` | FastAPI | Explicitly overrides the Secure cookie flag. Use `true` over HTTPS. |
-| `PNS_COOKIE_SAMESITE` | FastAPI | `lax` by default; use `none` only for cross-site HTTPS deployments. |
-| `PNS_COOKIE_DOMAIN` | FastAPI | Optional cookie domain, e.g. a shared parent domain for frontend/API subdomains. |
+| Variable                   | Application  | Purpose                                                                                           |
+| -------------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_API_BASE_URL` | Next.js      | Required absolute HTTP(S) base URL for FastAPI. Set only the origin, without `/api` or `/api/v1`. |
+| `NEXT_PUBLIC_APP_URL`      | Next.js      | Optional canonical frontend origin for deployment metadata and integrations.                      |
+| `APP_ENV`                  | FastAPI      | Environment name; `production` defaults session cookies to Secure.                                |
+| `FRONTEND_URL`             | FastAPI      | Canonical frontend origin for deployment documentation and configuration.                         |
+| `CORS_ORIGINS`             | FastAPI      | Comma-separated exact browser origins allowed to call the API with credentials.                   |
+| `PNS_ALLOWED_HOSTS`        | FastAPI      | Comma-separated API hostnames accepted by FastAPI's host validation.                              |
+| `DATABASE_URL`             | FastAPI only | PostgreSQL connection string for the existing Supabase database.                                  |
+| `PNS_SECURE_COOKIES`       | FastAPI      | Explicitly overrides the Secure cookie flag. Use `true` over HTTPS.                               |
+| `PNS_COOKIE_SAMESITE`      | FastAPI      | `lax` by default; use `none` only for cross-site HTTPS deployments.                               |
+| `PNS_COOKIE_DOMAIN`        | FastAPI      | Optional cookie domain, e.g. a shared parent domain for frontend/API subdomains.                  |
 
 `NEXT_PUBLIC_API_BASE_URL` is public and is compiled into the Next.js build. Do not put database
 URLs, service-role keys, or any secret in a `NEXT_PUBLIC_*` variable.
@@ -28,6 +29,7 @@ credentials only in `backend/.env`.
 
 ```dotenv
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
 Configure `backend/.env`:
@@ -36,6 +38,7 @@ Configure `backend/.env`:
 APP_ENV=development
 FRONTEND_URL=http://localhost:3000
 CORS_ORIGINS=http://localhost:3000
+PNS_ALLOWED_HOSTS=localhost,127.0.0.1
 DATABASE_URL=
 ```
 
@@ -47,52 +50,56 @@ with no path. Do not use wildcard CORS with credentials.
 
 ## Production and changing API URLs
 
-Set `NEXT_PUBLIC_API_BASE_URL` in the frontend build environment to the FastAPI URL reachable by
-browsers and by the Next.js server. The frontend adds `/api/v1` if it is not already present.
-For a same-origin Nginx deployment, use the public site URL, for example
-`https://your-domain.example`. For separate subdomains, use the public API origin, e.g.
-`https://api.your-domain.example`.
+Set `NEXT_PUBLIC_API_BASE_URL` in the frontend Vercel project to the public FastAPI origin
+reachable by browsers, for example `https://your-backend-domain.example`. Do not add a path;
+the API client centrally adds `/api/v1`. Set `NEXT_PUBLIC_APP_URL` to the canonical frontend
+origin when needed by metadata or integrations.
 
-Set `APP_ENV=production`, `FRONTEND_URL`, and `CORS_ORIGINS` in `backend/.env`. Example for a
-frontend at `https://www.your-domain.example`:
+Set these variables in the backend Vercel project:
 
 ```dotenv
 APP_ENV=production
-FRONTEND_URL=https://www.your-domain.example
-CORS_ORIGINS=https://www.your-domain.example
-DATABASE_URL=your-existing-supabase-postgresql-connection
+FRONTEND_URL=https://your-frontend-domain.example
+CORS_ORIGINS=https://your-frontend-domain.example
+PNS_ALLOWED_HOSTS=your-backend-hostname.example
+DATABASE_URL=your-database-url
 PNS_SECURE_COOKIES=true
+PNS_COOKIE_SAMESITE=none
 ```
 
-Replace example values with the deployment's real URLs and existing PostgreSQL connection string.
-Keep the database URL only in `backend/.env`. `CORS_ORIGINS` accepts a comma-separated
-list for multiple exact origins. Wildcard origins are rejected because credentialed CORS cannot
-safely use `*`.
+Keep the real database URL only in the backend environment. Set `REDIS_URL` only when a shared
+Redis service is configured. `CORS_ORIGINS` accepts comma-separated exact origins (scheme and
+optional port, no path); `PNS_ALLOWED_HOSTS` accepts comma-separated hostnames only. Neither
+setting accepts wildcards. Do not use `0.0.0.0` as an allowed public host.
 
 Because `NEXT_PUBLIC_API_BASE_URL` is a public build-time variable, rebuild/redeploy Next.js after
-changing it. Changing backend allowed origins requires restarting FastAPI, not changing source.
+changing it. The frontend and backend Vercel projects deploy independently. After changing
+backend environment variables, redeploy the backend. Changing domains requires updating the
+frontend API URL and the backend's frontend origin/CORS list and backend hostname list; no source
+changes are needed. Use `GET https://your-backend-domain.example/api/health` to verify API
+availability.
+
+For Vercel, set the frontend project's Root Directory to the repository root and its
+`NEXT_PUBLIC_API_BASE_URL` to the backend origin. Set the backend project's Root Directory to
+`backend/`, then add its backend-only variables above. The backend's `vercel.json` sends backend
+requests to its FastAPI ASGI entry point; no frontend proxy or rewrite is needed.
 
 ## Authentication cookies, CORS, and HTTPS
 
-The existing `pns_admin_session` cookie remains HttpOnly and is sent by the centralized frontend
-API client using `credentials: "include"`. Login, logout, session verification, and backend RBAC
-are unchanged. CORS must list the precise frontend origin and keeps `allow_credentials=True`.
-
-For same-site deployments (same hostname or subdomains under one registrable domain), keep
-`PNS_COOKIE_SAMESITE=lax`, use HTTPS in production, and set `PNS_SECURE_COOKIES=true`. To share a
-cookie across frontend/API subdomains, configure `PNS_COOKIE_DOMAIN` to the appropriate parent
-domain only when needed.
-
-For genuinely cross-site frontend and API origins, modern browsers require HTTPS and
-`PNS_COOKIE_SAMESITE=none` together with `PNS_SECURE_COOKIES=true`. Do not disable Secure, widen
-CORS to `*`, or remove credential checks to work around browser restrictions. Browser third-party
-cookie policies may still block cross-site cookies; prefer a same-site reverse proxy/domain where
-possible.
+The existing host-only `pns_admin_session` HttpOnly cookie remains database-backed. For separate
+Vercel domains, configure HTTPS and `PNS_COOKIE_SAMESITE=none` with
+`PNS_SECURE_COOKIES=true`; leave `PNS_COOKIE_DOMAIN` unset unless both hosts share a registrable
+domain and deliberate cookie sharing is needed. The frontend sends credentials on every API
+request. Cross-site tracking prevention can still block third-party cookies in some browsers;
+verify login, `/admin/auth/me`, and logout in the browser Network/Application panels. If blocked,
+use a same-site custom domain or reverse proxy rather than weakening CORS or authentication.
+Because the API cookie is host-only, the frontend verifies `/admin` sessions in the browser
+against FastAPI instead of trying to read the backend cookie on the frontend server.
 
 ## Troubleshooting
 
-- **Requests go to the wrong API path:** verify `NEXT_PUBLIC_API_BASE_URL` points to the FastAPI
-  host; the frontend adds `/api/v1` if it is missing. Rebuild Next.js after changes.
+- **Requests go to the wrong API path:** verify `NEXT_PUBLIC_API_BASE_URL` contains only the API
+  origin and redeploy Next.js after changing it. The API client adds exactly one `/api/v1` prefix.
 - **CORS/preflight error:** check the request's exact `Origin` against comma-separated
   `CORS_ORIGINS`; include scheme and port, omit paths, then restart FastAPI.
 - **Login works but later requests are unauthenticated:** confirm browser cookies are enabled,
@@ -111,5 +118,5 @@ possible.
   `NEXT_PUBLIC_API_BASE_URL` points to the reachable API, the API hostname is included in
   `PNS_ALLOWED_HOSTS`, and the frontend origin is included in `CORS_ORIGINS`; restart FastAPI
   after backend environment changes.
-- **404:** verify the API URL ends in `/api/v1` and that any reverse proxy forwards `/api/v1/`
-  unchanged. HTTP responses, including 404s, are not treated as network disconnections.
+- **404:** verify `NEXT_PUBLIC_API_BASE_URL` contains only the API origin and the API client adds
+  exactly one `/api/v1` prefix. HTTP responses, including 404s, are not network disconnections.

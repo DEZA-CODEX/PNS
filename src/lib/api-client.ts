@@ -9,7 +9,9 @@ export class ApiConfigurationError extends Error {
   }
 }
 
-function apiBaseUrl(): string {
+const API_PREFIX = "/api/v1";
+
+function apiBaseUrl(): URL {
   const configured = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (!configured) {
     throw new ApiConfigurationError(
@@ -17,27 +19,68 @@ function apiBaseUrl(): string {
     );
   }
 
-  const base = configured.replace(/\/+$/u, "");
-  return base.endsWith("/api/v1") ? base : `${base}/api/v1`;
+  let base: URL;
+  try {
+    base = new URL(configured);
+  } catch {
+    throw new ApiConfigurationError(
+      "NEXT_PUBLIC_API_BASE_URL must be an absolute backend URL, such as http://localhost:8000.",
+    );
+  }
+
+  if (
+    !["http:", "https:"].includes(base.protocol) ||
+    !base.hostname ||
+    base.username ||
+    base.password ||
+    base.search ||
+    base.hash ||
+    !["", "/", "/api", "/api/v1"].includes(base.pathname.replace(/\/+$/u, ""))
+  ) {
+    throw new ApiConfigurationError(
+      "NEXT_PUBLIC_API_BASE_URL must be an HTTP(S) backend origin, optionally ending in /api or /api/v1.",
+    );
+  }
+
+  base.pathname = `${API_PREFIX}/`;
+  return base;
 }
 
-export function apiUrl(path: string) {
+export function apiUrl(path: string): string {
   const base = apiBaseUrl();
-  const suffix = path.replace(/^\/+/, "");
-  return `${base}/${suffix}`;
+  if (/^[a-z][a-z\d+.-]*:/iu.test(path) || path.startsWith("//")) {
+    throw new ApiConfigurationError("API endpoint paths must be relative to the backend.");
+  }
+
+  let suffix = path.replace(/^\/+/, "");
+  while (suffix === "api" || suffix.startsWith("api/")) {
+    suffix = suffix.replace(/^api(?:\/v1)?(?:\/|$)/u, "");
+  }
+
+  const url = new URL(suffix, base);
+  if (url.origin !== base.origin || !url.pathname.startsWith(`${API_PREFIX}/`)) {
+    throw new ApiConfigurationError("API endpoint paths must stay within the /api/v1 prefix.");
+  }
+  return url.toString();
 }
 
 export function apiResourceUrl(url: string) {
-  if (!url.startsWith("/api/v1/")) return url;
-  return apiUrl(url.slice("/api/v1/".length));
+  if (!/^\/api(?:\/v1)?(?:\/|$)/u.test(url)) return url;
+  return apiUrl(url);
 }
 
 export async function apiFetch(path: string, init: ApiRequestInit = {}) {
   const { timeoutMs = 15_000, ...requestInit } = init;
   const url = apiUrl(path);
+  const headers = new Headers(requestInit.headers);
+  if (typeof FormData !== "undefined" && requestInit.body instanceof FormData) {
+    headers.delete("Content-Type");
+  }
+
   try {
     return await fetch(url, {
       ...requestInit,
+      headers,
       credentials: "include",
       cache: requestInit.cache ?? "no-store",
       signal: requestInit.signal ?? AbortSignal.timeout(timeoutMs),

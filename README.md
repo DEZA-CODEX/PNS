@@ -8,15 +8,16 @@ records are created by this migration.
 ## Architecture
 
 ```text
-Browser -> Nginx -> Next.js pages and assets
-                 -> FastAPI /api/v1
-                    -> Supabase PostgreSQL
+Browser -> Next.js pages and assets (frontend deployment)
+       -> FastAPI /api/v1 (independent backend deployment)
+          -> Supabase PostgreSQL
 ```
 
-The browser uses the same-origin `/api/v1` prefix in production. Next.js server rendering verifies
-admin sessions by calling FastAPI with the incoming HttpOnly session cookie. The Next.js app has
-no database client, API route handlers, or private Supabase credentials. Image upload records are
-stored in PostgreSQL, including uploaded image bytes.
+The browser uses the absolute backend origin configured in `NEXT_PUBLIC_API_BASE_URL`; the shared
+client adds the `/api/v1` prefix. Next.js server rendering verifies admin sessions by calling
+FastAPI with the incoming HttpOnly session cookie. The Next.js app has no database client, API
+route handlers, or private Supabase credentials. Image upload records are stored in PostgreSQL,
+including uploaded image bytes.
 
 ## Local development
 
@@ -24,7 +25,7 @@ Configure ignored root `.env` and `backend/.env` directly. Put the PostgreSQL co
 `backend/.env` only; the root `.env` is consumed by Next.js and must contain no database credentials.
 Do not overwrite an existing `.env` blindly, and do not share or commit either private file.
 
-For local development, set `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1` in the root
+For local development, set `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` in the root
 `.env` and `CORS_ORIGINS=http://localhost:3000` in `backend/.env`, then run FastAPI:
 
 ```sh

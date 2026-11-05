@@ -20,6 +20,10 @@ from app.core.responses import JSONResponse
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("pns.backend")
 settings = get_settings()
+if not settings.allowed_hosts:
+    raise RuntimeError(
+        "PNS_ALLOWED_HOSTS must list the backend hostnames accepted by this deployment."
+    )
 
 
 @asynccontextmanager
@@ -45,7 +49,7 @@ async def lifespan(_: FastAPI):
     await close_database()
 
 
-app = FastAPI(
+fastapi_app = FastAPI(
     title="PNS Hotel API",
     version="1.0.0",
     docs_url="/docs" if settings.api_docs_enabled else None,
@@ -53,17 +57,12 @@ app = FastAPI(
     openapi_url="/openapi.json" if settings.api_docs_enabled else None,
     lifespan=lifespan,
 )
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.allowed_hosts))
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
+fastapi_app.add_middleware(
+    TrustedHostMiddleware, allowed_hosts=list(settings.allowed_hosts)
 )
 
 
-@app.middleware("http")
+@fastapi_app.middleware("http")
 async def request_context(request: Request, call_next):
     request_id_value = request.headers.get("x-request-id", "").strip() or str(uuid4())
     request.state.request_id = request_id_value
@@ -72,7 +71,7 @@ async def request_context(request: Request, call_next):
     return response
 
 
-@app.exception_handler(APIError)
+@fastapi_app.exception_handler(APIError)
 async def handle_api_error(request: Request, error: APIError) -> JSONResponse:
     request_id_value = getattr(request.state, "request_id", None)
     content = {
@@ -84,7 +83,7 @@ async def handle_api_error(request: Request, error: APIError) -> JSONResponse:
     return JSONResponse(content, status_code=error.status_code)
 
 
-@app.exception_handler(RequestValidationError)
+@fastapi_app.exception_handler(RequestValidationError)
 async def handle_validation_error(
     request: Request, error: RequestValidationError
 ) -> JSONResponse:
@@ -99,15 +98,20 @@ async def handle_validation_error(
     return JSONResponse(content, status_code=400)
 
 
-app.include_router(v1_router, prefix="/api/v1")
+fastapi_app.include_router(v1_router, prefix="/api/v1")
 
 
-@app.get("/health/live", include_in_schema=False)
+@fastapi_app.get("/health/live", include_in_schema=False)
 async def live_health():
     return {"status": "ok"}
 
 
-@app.get("/health/ready", include_in_schema=False)
+@fastapi_app.get("/api/health")
+async def api_health():
+    return {"status": "ok"}
+
+
+@fastapi_app.get("/health/ready", include_in_schema=False)
 async def ready_health():
     engine = get_engine()
     if engine is None:
@@ -119,3 +123,12 @@ async def ready_health():
         logger.exception("Readiness database check failed")
         return JSONResponse({"status": "not_ready", "database": "unavailable"}, status_code=503)
     return {"status": "ready", "database": "ok"}
+
+
+app = CORSMiddleware(
+    app=fastapi_app,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
+)

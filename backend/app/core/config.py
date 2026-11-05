@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ipaddress
 import os
+import re
 from functools import lru_cache
 from typing import Annotated, Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -53,19 +55,45 @@ class Settings(BaseSettings):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
+    @field_validator("frontend_url")
+    @classmethod
+    def normalize_frontend_url(cls, value: str) -> str:
+        return _normalize_origin(value) if value.strip() else ""
+
     @field_validator("cors_origins")
     @classmethod
-    def reject_wildcard_cors_origin(cls, origins: list[str]) -> list[str]:
+    def normalize_cors_origins(cls, origins: list[str]) -> list[str]:
         if "*" in origins:
             raise ValueError("CORS_ORIGINS cannot include '*' when credentials are enabled.")
-        return origins
+        return list(dict.fromkeys(_normalize_origin(origin) for origin in origins))
 
     @field_validator("allowed_hosts")
     @classmethod
     def reject_wildcard_allowed_host(cls, hosts: list[str]) -> list[str]:
-        if any("*" in host for host in hosts):
-            raise ValueError("PNS_ALLOWED_HOSTS must contain exact hostnames, not wildcards.")
-        return hosts
+        normalized: list[str] = []
+        for host in hosts:
+            candidate = host.strip().rstrip(".").lower()
+            if not candidate or "*" in candidate:
+                raise ValueError(
+                    "PNS_ALLOWED_HOSTS must contain exact hostnames, not wildcards."
+                )
+            try:
+                address = ipaddress.ip_address(candidate)
+            except ValueError as error:
+                if len(candidate) > 253 or not all(
+                    re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label)
+                    for label in candidate.split(".")
+                ):
+                    raise ValueError(
+                        "PNS_ALLOWED_HOSTS must contain hostnames only, without schemes, ports, or paths."
+                    ) from error
+            else:
+                if address.is_unspecified:
+                    raise ValueError(
+                        "PNS_ALLOWED_HOSTS cannot contain unspecified bind addresses such as 0.0.0.0."
+                    )
+            normalized.append(candidate)
+        return list(dict.fromkeys(normalized))
 
     @field_validator("cookie_samesite")
     @classmethod
@@ -90,6 +118,37 @@ class Settings(BaseSettings):
         if self.cookie_samesite == "none" and not self.secure_cookies:
             raise ValueError("PNS_COOKIE_SAMESITE=none requires PNS_SECURE_COOKIES=true.")
         return self
+
+
+def _normalize_origin(value: str) -> str:
+    candidate = value.strip().rstrip("/")
+    try:
+        parsed = urlsplit(candidate)
+        port = parsed.port
+    except ValueError as error:
+        raise ValueError("Origins must be valid HTTP(S) origins.") from error
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError(
+            "Origins must be complete HTTP(S) origins without paths, queries, or fragments."
+        )
+
+    hostname = parsed.hostname.encode("idna").decode("ascii").lower()
+    if ":" in hostname:
+        hostname = f"[{hostname}]"
+    if port and not (
+        (parsed.scheme.lower() == "http" and port == 80)
+        or (parsed.scheme.lower() == "https" and port == 443)
+    ):
+        hostname = f"{hostname}:{port}"
+    return f"{parsed.scheme.lower()}://{hostname}"
 
 
 @lru_cache
