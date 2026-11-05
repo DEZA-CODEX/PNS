@@ -6,21 +6,22 @@ values must never be copied into the frontend environment.
 
 ## Environment variables
 
-| Variable                   | Application  | Purpose                                                                                           |
-| -------------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_API_BASE_URL` | Next.js      | Required absolute HTTP(S) base URL for FastAPI. Set only the origin, without `/api` or `/api/v1`. |
-| `NEXT_PUBLIC_APP_URL`      | Next.js      | Optional canonical frontend origin for deployment metadata and integrations.                      |
-| `APP_ENV`                  | FastAPI      | Environment name; `production` defaults session cookies to Secure.                                |
-| `FRONTEND_URL`             | FastAPI      | Canonical frontend origin for deployment documentation and configuration.                         |
-| `CORS_ORIGINS`             | FastAPI      | Comma-separated exact browser origins allowed to call the API with credentials.                   |
-| `PNS_ALLOWED_HOSTS`        | FastAPI      | Comma-separated API hostnames accepted by FastAPI's host validation.                              |
-| `DATABASE_URL`             | FastAPI only | PostgreSQL connection string for the existing Supabase database.                                  |
-| `PNS_SECURE_COOKIES`       | FastAPI      | Explicitly overrides the Secure cookie flag. Use `true` over HTTPS.                               |
-| `PNS_COOKIE_SAMESITE`      | FastAPI      | `lax` by default; use `none` only for cross-site HTTPS deployments.                               |
-| `PNS_COOKIE_DOMAIN`        | FastAPI      | Optional cookie domain, e.g. a shared parent domain for frontend/API subdomains.                  |
+| Variable                   | Application  | Purpose                                                                                                  |
+| -------------------------- | ------------ | -------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_API_BASE_URL` | Next.js      | Required at runtime for browser requests to FastAPI; not required to build. Use an absolute HTTP(S) URL. |
+| `NEXT_PUBLIC_APP_URL`      | Next.js      | Optional canonical frontend origin for deployment metadata and integrations.                             |
+| `APP_ENV`                  | FastAPI      | Environment name; `production` defaults session cookies to Secure.                                       |
+| `FRONTEND_URL`             | FastAPI      | Canonical frontend origin for deployment documentation and configuration.                                |
+| `CORS_ORIGINS`             | FastAPI      | Comma-separated exact browser origins allowed to call the API with credentials.                          |
+| `PNS_ALLOWED_HOSTS`        | FastAPI      | Comma-separated API hostnames accepted by FastAPI's host validation.                                     |
+| `DATABASE_URL`             | FastAPI only | PostgreSQL connection string for the existing Supabase database.                                         |
+| `PNS_SECURE_COOKIES`       | FastAPI      | Explicitly overrides the Secure cookie flag. Use `true` over HTTPS.                                      |
+| `PNS_COOKIE_SAMESITE`      | FastAPI      | `lax` by default; use `none` only for cross-site HTTPS deployments.                                      |
+| `PNS_COOKIE_DOMAIN`        | FastAPI      | Optional cookie domain, e.g. a shared parent domain for frontend/API subdomains.                         |
 
 `NEXT_PUBLIC_API_BASE_URL` is public and is compiled into the Next.js build. Do not put database
 URLs, service-role keys, or any secret in a `NEXT_PUBLIC_*` variable.
+When configured, its HTTP(S) origin is added to the frontend Content Security Policy.
 
 ## Development
 
