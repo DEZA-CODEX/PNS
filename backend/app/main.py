@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from sqlalchemy import text
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app.api.diagnostics import DIAGNOSTICS_DASHBOARD
+from app.api.diagnostics import router as diagnostics_router
 from app.api.v1.router import router as v1_router
 from app.core.config import get_settings
 from app.core.database import close_database, get_engine
@@ -99,6 +105,7 @@ async def handle_validation_error(
 
 
 fastapi_app.include_router(v1_router, prefix="/api/v1")
+fastapi_app.include_router(diagnostics_router, prefix="/api/v1")
 
 
 @fastapi_app.get("/health/live", include_in_schema=False)
@@ -108,21 +115,65 @@ async def live_health():
 
 @fastapi_app.get("/api/health")
 async def api_health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "application": fastapi_app.title,
+        "environment": settings.app_env,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "api": "available",
+    }
+
+
+@fastapi_app.get("/test", response_class=HTMLResponse, include_in_schema=False)
+async def diagnostics_dashboard():
+    backend_url = json.dumps(settings.backend_public_url)
+    page = DIAGNOSTICS_DASHBOARD.replace(
+        "const backendBase='';", f"const backendBase={backend_url};"
+    )
+    return HTMLResponse(page)
+
+
+@fastapi_app.get("/api/health/ready")
+async def api_ready_health():
+    database_ready = False
+    try:
+        engine = get_engine()
+        if engine is not None:
+            async with asyncio.timeout(settings.diagnostics_timeout_seconds):
+                async with engine.connect() as connection:
+                    await connection.execute(text("SELECT 1"))
+            database_ready = True
+    except Exception:
+        logger.warning("Readiness database check failed.")
+
+    try:
+        async with asyncio.timeout(settings.diagnostics_timeout_seconds):
+            redis_ready = await login_rate_limiter.health_check()
+    except Exception:
+        logger.warning("Readiness Redis check failed.")
+        redis_ready = False
+    if settings.redis_url and redis_ready is None:
+        redis_ready = False
+    ready = database_ready and redis_ready is not False
+    return JSONResponse(
+        {
+            "status": "ready" if ready else "not_ready",
+            "database": (
+                "ok"
+                if database_ready
+                else "unavailable"
+                if settings.database_url
+                else "not_configured"
+            ),
+            "redis": "ok" if redis_ready else ("unavailable" if redis_ready is False else "not_configured"),
+        },
+        status_code=200 if ready else 503,
+    )
 
 
 @fastapi_app.get("/health/ready", include_in_schema=False)
 async def ready_health():
-    engine = get_engine()
-    if engine is None:
-        return JSONResponse({"status": "not_ready", "database": "not_configured"}, status_code=503)
-    try:
-        async with engine.connect() as connection:
-            await connection.execute(text("SELECT 1"))
-    except Exception:
-        logger.exception("Readiness database check failed")
-        return JSONResponse({"status": "not_ready", "database": "unavailable"}, status_code=503)
-    return {"status": "ready", "database": "ok"}
+    return await api_ready_health()
 
 
 app = CORSMiddleware(
@@ -130,5 +181,11 @@ app = CORSMiddleware(
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-Request-ID",
+        "X-PNS-Diagnostics-Token",
+        "X-PNS-Diagnostic-Probe",
+    ],
 )

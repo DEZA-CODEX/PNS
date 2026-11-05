@@ -72,6 +72,11 @@ class LoginRateLimiter:
         async with self._lock:
             self._attempts.pop(key, None)
 
+    async def health_check(self) -> bool | None:
+        if self._redis is None:
+            return None
+        return bool(await self._redis.ping())
+
     def _redis_key(self, key: str) -> str:
         return f"pns:login-rate-limit:{key}"
 

@@ -22,6 +22,13 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     frontend_url: str = ""
+    backend_public_url: str = Field(default="", validation_alias="BACKEND_PUBLIC_URL")
+    diagnostics_token: str | None = Field(
+        default=None, min_length=32, validation_alias="PNS_DIAGNOSTICS_TOKEN"
+    )
+    diagnostics_timeout_seconds: float = Field(
+        default=3.0, validation_alias="PNS_DIAGNOSTICS_TIMEOUT_SECONDS", gt=0, le=5
+    )
     database_url: str | None = Field(
         default=None,
         validation_alias=AliasChoices("DATABASE_URL", "SUPABASE_DB_URL"),
@@ -60,12 +67,21 @@ class Settings(BaseSettings):
     def normalize_frontend_url(cls, value: str) -> str:
         return _normalize_origin(value) if value.strip() else ""
 
+    @field_validator("backend_public_url")
+    @classmethod
+    def normalize_backend_public_url(cls, value: str) -> str:
+        return _normalize_origin(value) if value.strip() else ""
+
     @field_validator("cors_origins")
     @classmethod
     def normalize_cors_origins(cls, origins: list[str]) -> list[str]:
         if "*" in origins:
             raise ValueError("CORS_ORIGINS cannot include '*' when credentials are enabled.")
-        return list(dict.fromkeys(_normalize_origin(origin) for origin in origins))
+        return list(
+            dict.fromkeys(
+                _normalize_origin(origin, localhost_http=True) for origin in origins
+            )
+        )
 
     @field_validator("allowed_hosts")
     @classmethod
@@ -120,8 +136,28 @@ class Settings(BaseSettings):
         return self
 
 
-def _normalize_origin(value: str) -> str:
-    candidate = value.strip().rstrip("/")
+def _normalize_origin(value: str, *, localhost_http: bool = False) -> str:
+    candidate = value.strip()
+    if not candidate or "?" in candidate or "#" in candidate:
+        raise ValueError("Origins must not include queries or fragments.")
+
+    has_scheme = "://" in candidate
+    if not has_scheme:
+        if candidate.startswith("//"):
+            raise ValueError("Origins must include a hostname, not a scheme-relative URL.")
+        preliminary = urlsplit(f"https://{candidate}")
+        local_origin = preliminary.hostname in {"localhost"}
+        if preliminary.hostname:
+            try:
+                local_origin = local_origin or ipaddress.ip_address(
+                    preliminary.hostname
+                ).is_loopback
+            except ValueError:
+                pass
+        scheme = "http" if localhost_http and local_origin else "https"
+        candidate = f"{scheme}://{candidate}"
+
+    candidate = candidate.rstrip("/")
     try:
         parsed = urlsplit(candidate)
         port = parsed.port
@@ -140,10 +176,23 @@ def _normalize_origin(value: str) -> str:
             "Origins must be complete HTTP(S) origins without paths, queries, or fragments."
         )
 
-    hostname = parsed.hostname.encode("idna").decode("ascii").lower()
+    try:
+        hostname = parsed.hostname.encode("idna").decode("ascii").lower()
+    except UnicodeError as error:
+        raise ValueError("Origins must contain a valid hostname.") from error
+
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        if len(hostname) > 253 or not all(
+            re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label)
+            for label in hostname.rstrip(".").split(".")
+        ):
+            raise ValueError("Origins must contain a valid hostname.")
+
     if ":" in hostname:
         hostname = f"[{hostname}]"
-    if port and not (
+    if port is not None and not (
         (parsed.scheme.lower() == "http" and port == 80)
         or (parsed.scheme.lower() == "https" and port == 443)
     ):

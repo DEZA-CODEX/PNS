@@ -63,7 +63,357 @@ def test_health_endpoint(client: TestClient) -> None:
 def test_api_health_endpoint(client: TestClient) -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json()["status"] == "ok"
+    assert response.json()["application"] == "PNS Hotel API"
+    assert response.json()["api"] == "available"
+    assert "timestamp" in response.json()
+
+
+def test_diagnostics_dashboard_is_served_by_fastapi(client: TestClient) -> None:
+    response = client.get("/test")
+    assert response.status_code == 200
+    assert "PNS System Diagnostics" in response.text
+    assert "Copy diagnostic report" in response.text
+
+
+def test_readiness_endpoint_reports_database_unavailable_without_details(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module, "get_engine", lambda: None)
+    monkeypatch.setattr(
+        main_module,
+        "settings",
+        Settings(_env_file=None, diagnostics_timeout_seconds=3),
+    )
+
+    async def no_redis() -> None:
+        return None
+
+    monkeypatch.setattr(main_module.login_rate_limiter, "health_check", no_redis)
+    response = client.get("/api/health/ready")
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "not_ready",
+        "database": "not_configured",
+        "redis": "not_configured",
+    }
+
+
+def test_diagnostics_routes_require_access_token(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.api.diagnostics as diagnostics
+
+    monkeypatch.setattr(
+        diagnostics,
+        "get_settings",
+        lambda: Settings(
+            _env_file=None,
+            diagnostics_token="diagnostics-test-token-123456789012345",
+        ),
+    )
+    response = client.post("/api/v1/diagnostics/run")
+    assert response.status_code == 403
+    assert "not authorized" in response.json()["detail"]
+
+
+def test_individual_diagnostic_runs_only_the_requested_backend_check(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.api.diagnostics as diagnostics
+
+    monkeypatch.setattr(
+        diagnostics,
+        "get_settings",
+        lambda: Settings(
+            _env_file=None,
+            diagnostics_token="diagnostics-test-token-123456789012345",
+        ),
+    )
+    headers = {
+        "X-PNS-Diagnostics-Token": "diagnostics-test-token-123456789012345"
+    }
+    response = client.post(
+        "/api/v1/diagnostics/run?test_name=API%20routing", headers=headers
+    )
+    assert response.status_code == 200
+    assert [item["name"] for item in response.json()["results"]] == ["API routing"]
+    assert response.json()["results"][0]["status"] == "PASS"
+
+
+def test_diagnostics_results_are_correlated_and_reject_arbitrary_targets(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.api.diagnostics as diagnostics
+
+    settings = Settings(
+        _env_file=None,
+        diagnostics_token="diagnostics-test-token-123456789012345",
+        backend_public_url="https://backend.example",
+        frontend_url="https://frontend.example",
+        cors_origins="https://frontend.example",
+        allowed_hosts="backend.example",
+    )
+    monkeypatch.setattr(diagnostics, "get_settings", lambda: settings)
+
+    async def backend_checks(
+        _application: object, _test_name: str | None = None
+    ) -> tuple[list[dict[str, object]], int]:
+        return [
+            {
+                "name": "FastAPI application",
+                "status": "PASS",
+                "target": None,
+                "duration_ms": 1,
+                "http_status": None,
+                "error_category": None,
+                "message": "Application is running.",
+                "suggested_action": None,
+                "details": {},
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        ], 2
+
+    monkeypatch.setattr(diagnostics, "run_backend_checks", backend_checks)
+    diagnostics._browser_results.clear()
+    headers = {
+        "X-PNS-Diagnostics-Token": "diagnostics-test-token-123456789012345"
+    }
+    started = client.post("/api/v1/diagnostics/run", headers=headers)
+    assert started.status_code == 200
+    correlation_id = started.json()["correlation_id"]
+
+    report = {
+        "correlation_id": correlation_id,
+        "test_type": "browser_to_backend",
+        "target_url": "https://backend.example/api/health",
+        "status": "PASS",
+        "http_status": 200,
+        "duration_ms": 12,
+        "error_message": "Browser request succeeded.",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    recorded = client.post(
+        "/api/v1/diagnostics/browser-result", headers=headers, json=report
+    )
+    assert recorded.status_code == 200
+    credentialed_report = {
+        **report,
+        "test_type": "browser_credentialed_request",
+        "credentials_included": True,
+    }
+    assert client.post(
+        "/api/v1/diagnostics/browser-result",
+        headers=headers,
+        json=credentialed_report,
+    ).status_code == 200
+    results = client.get(
+        "/api/v1/diagnostics/results",
+        headers=headers,
+        params={"correlation_id": correlation_id},
+    )
+    assert results.status_code == 200
+    assert results.json()["correlation_id"] == correlation_id
+    assert {item["name"] for item in results.json()["results"]} == {
+        "FastAPI application",
+        "Serverless execution",
+        "Browser To Backend",
+        "Browser Credentialed Request",
+    }
+
+    report["target_url"] = "https://attacker.example/"
+    rejected = client.post(
+        "/api/v1/diagnostics/browser-result", headers=headers, json=report
+    )
+    assert rejected.status_code == 400
+
+
+def test_frontend_timeout_is_classified_without_exposing_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    from app.api import diagnostics
+
+    class TimeoutClient:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def stream(self, _method: str, _url: str) -> TimeoutClient:
+            return self
+
+        async def __aenter__(self) -> TimeoutClient:
+            raise httpx.ConnectTimeout("private connection details")
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr(diagnostics.httpx, "AsyncClient", TimeoutClient)
+
+    async def check_frontend() -> dict[str, object]:
+        return await diagnostics._check_frontend("https://frontend.example", 1)
+
+    result = asyncio.run(check_frontend())
+    assert result["status"] == "FAIL"
+    assert result["error_category"] == "CONNECTION_TIMEOUT"
+    assert "private connection details" not in str(result)
+
+
+def test_frontend_redirect_is_reported_without_query_parameters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from app.api import diagnostics
+
+    class ResponseContext:
+        async def __aenter__(self) -> SimpleNamespace:
+            return SimpleNamespace(
+                status_code=302,
+                headers={"location": "https://login.example/path?token=secret"},
+            )
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class RedirectClient:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        async def __aenter__(self) -> RedirectClient:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        def stream(self, _method: str, _url: str) -> ResponseContext:
+            return ResponseContext()
+
+    monkeypatch.setattr(diagnostics.httpx, "AsyncClient", RedirectClient)
+
+    async def check_frontend() -> dict[str, object]:
+        return await diagnostics._check_frontend("https://frontend.example", 1)
+
+    result = asyncio.run(check_frontend())
+    assert result["status"] == "WARNING"
+    assert result["http_status"] == 302
+    assert result["details"]["redirect_destination"] == "https://login.example"
+
+
+def test_backend_checks_reuse_database_resources_and_skip_optional_redis(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from app.api import diagnostics
+
+    settings = Settings(
+        _env_file=None,
+        diagnostics_token="diagnostics-test-token-123456789012345",
+        frontend_url="https://frontend.example",
+        backend_public_url="https://backend.example",
+        database_url="postgresql://user:password@database.example/db",
+        cors_origins="https://frontend.example",
+        allowed_hosts="backend.example",
+    )
+    monkeypatch.setattr(diagnostics, "get_settings", lambda: settings)
+
+    class Connection:
+        async def __aenter__(self) -> Connection:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def execute(self, _query: object) -> None:
+            return None
+
+    class Engine:
+        pool = SimpleNamespace(status=lambda: "pool healthy")
+
+        def connect(self) -> Connection:
+            return Connection()
+
+    class Session:
+        async def __aenter__(self) -> Session:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def execute(self, _query: object) -> None:
+            return None
+
+    class SessionFactory:
+        def __call__(self) -> Session:
+            return Session()
+
+    async def frontend(_url: str, _timeout: float) -> dict[str, object]:
+        return diagnostics._result(
+            "Backend to frontend", diagnostics.Status.PASS, http_status=200
+        )
+
+    monkeypatch.setattr(diagnostics, "get_engine", Engine)
+    monkeypatch.setattr(diagnostics, "get_session_factory", SessionFactory)
+    monkeypatch.setattr(diagnostics, "_check_frontend", frontend)
+
+    results, _duration = asyncio.run(diagnostics.run_backend_checks(object()))
+    by_name = {result["name"]: result for result in results}
+    assert by_name["Deployment configuration"]["status"] == "PASS"
+    assert by_name["Backend to frontend"]["status"] == "PASS"
+    assert by_name["PostgreSQL connection and SELECT 1"]["status"] == "PASS"
+    assert by_name["Database session availability"]["status"] == "PASS"
+    assert by_name["Redis"]["status"] == "SKIPPED"
+    assert by_name["Rate limiter"]["status"] == "WARNING"
+    assert by_name["Image repository and storage"]["status"] == "SKIPPED"
+    assert "password" not in str(results)
+
+
+def test_configured_redis_failure_is_reported_safely(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from redis.exceptions import RedisError
+
+    from app.api import diagnostics
+
+    settings = Settings(
+        _env_file=None,
+        redis_url="redis://user:password@redis.example/0",
+    )
+    monkeypatch.setattr(diagnostics, "get_settings", lambda: settings)
+
+    async def redis_unavailable() -> bool:
+        raise RedisError("redis password and endpoint details")
+
+    monkeypatch.setattr(diagnostics.login_rate_limiter, "health_check", redis_unavailable)
+
+    results, _duration = asyncio.run(
+        diagnostics.run_backend_checks(object(), "Redis")
+    )
+    assert results[0]["status"] == "FAIL"
+    assert results[0]["error_category"] == "REDIS_ERROR"
+    assert "password" not in str(results)
+
+
+def test_diagnostics_settings_validate_public_urls_and_timeout() -> None:
+    settings = Settings(
+        _env_file=None,
+        frontend_url="https://frontend.example/",
+        backend_public_url="https://backend.example/",
+        diagnostics_timeout_seconds=4,
+    )
+    assert settings.frontend_url == "https://frontend.example"
+    assert settings.backend_public_url == "https://backend.example"
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, diagnostics_timeout_seconds=30)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, diagnostics_token="short")
 
 
 def test_startup_continues_when_database_is_unreachable(
@@ -138,6 +488,19 @@ def test_cors_preflight_allows_configured_frontend_origin(client: TestClient) ->
     assert response.headers["access-control-allow-credentials"] == "true"
     assert "authorization" in response.headers["access-control-allow-headers"].lower()
 
+    diagnostics_preflight = client.options(
+        "/api/health",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "x-pns-diagnostic-probe",
+        },
+    )
+    assert diagnostics_preflight.status_code == 200
+    assert "x-pns-diagnostic-probe" in diagnostics_preflight.headers[
+        "access-control-allow-headers"
+    ].lower()
+
 
 def test_cors_rejects_unconfigured_origin_and_allows_credentials_on_errors(
     client: TestClient,
@@ -197,6 +560,71 @@ def test_cors_origins_parse_csv_and_reject_wildcard() -> None:
         Settings(_env_file=None, allowed_hosts="https://pns.example")
     with pytest.raises(ValidationError, match="unspecified bind addresses"):
         Settings(_env_file=None, allowed_hosts="0.0.0.0")
+
+
+def test_frontend_and_cors_origins_normalize_protocolless_hosts() -> None:
+    settings = Settings(
+        _env_file=None,
+        frontend_url="deza-pns.vercel.app/",
+        cors_origins="deza-pns.vercel.app,localhost:3000",
+    )
+    assert settings.frontend_url == "https://deza-pns.vercel.app"
+    assert settings.cors_origins == [
+        "https://deza-pns.vercel.app",
+        "http://localhost:3000",
+    ]
+
+
+def test_explicit_origin_schemes_and_trailing_slashes_are_preserved_and_normalized() -> None:
+    settings = Settings(
+        _env_file=None,
+        frontend_url="https://deza-pns.vercel.app///",
+        cors_origins="http://localhost:3000/,https://admin.example/",
+    )
+    assert settings.frontend_url == "https://deza-pns.vercel.app"
+    assert settings.cors_origins == [
+        "http://localhost:3000",
+        "https://admin.example",
+    ]
+    localhost_settings = Settings(
+        _env_file=None,
+        frontend_url="http://localhost:3000/",
+        cors_origins="http://localhost:3000/",
+    )
+    assert localhost_settings.frontend_url == "http://localhost:3000"
+    assert localhost_settings.cors_origins == ["http://localhost:3000"]
+
+
+@pytest.mark.parametrize(
+    "frontend_url,cors_origins",
+    [
+        ("https://frontend.example/path", None),
+        ("https://frontend.example?debug=true", None),
+        ("https://frontend.example#section", None),
+        (None, "https://frontend.example/path"),
+        (None, "https://frontend.example?debug=true"),
+        (None, "https://frontend.example#section"),
+        ("ftp://frontend.example", None),
+        (None, "ftp://frontend.example"),
+    ],
+)
+def test_frontend_and_cors_origins_reject_non_origins(
+    frontend_url: str | None,
+    cors_origins: str | None,
+) -> None:
+    values: dict[str, object] = {}
+    if frontend_url is not None:
+        values["frontend_url"] = frontend_url
+    if cors_origins is not None:
+        values["cors_origins"] = cors_origins
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **values)
+
+
+def test_cors_middleware_uses_normalized_settings() -> None:
+    from app.main import app
+
+    assert app.allow_origins == get_settings().cors_origins
 
 
 def test_login_cookie_is_used_for_session_verification(

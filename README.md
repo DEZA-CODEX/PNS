@@ -95,8 +95,39 @@ Redis when `REDIS_URL` is configured; single-instance deployments can omit it an
 limiter. When running multiple backend instances, configure all instances to use the same Redis
 service.
 
-`/health/live` and `/health/ready` provide liveness and database readiness checks. API docs are
-disabled by default. If enabled, Nginx restricts `/docs` and `/openapi.json` to loopback requests.
+`/health/live`, `/api/health`, and `/api/health/ready` provide liveness and readiness checks. API
+docs are disabled by default. If enabled, Nginx restricts `/docs` and `/openapi.json` to loopback
+requests.
+
+### Connectivity diagnostics
+
+The backend deployment serves a protected diagnostics page at `/test` and provides
+`/api/v1/diagnostics/run`, `/api/v1/diagnostics/browser-result`, and
+`/api/v1/diagnostics/results`. Set these backend environment variables in the deployment settings:
+
+- `FRONTEND_URL`: frontend origin checked by a real backend HTTP request.
+- `BACKEND_PUBLIC_URL`: backend public origin used by the browser health request.
+- `PNS_DIAGNOSTICS_TOKEN`: a strong private token required by all detailed diagnostic endpoints.
+- `CORS_ORIGINS` and `PNS_ALLOWED_HOSTS`: exact frontend origins and backend hostnames.
+- `DATABASE_URL`: existing PostgreSQL connection. `REDIS_URL` is optional.
+- `PNS_DIAGNOSTICS_TIMEOUT_SECONDS`: optional per-check timeout (default 3 seconds; maximum 5).
+
+Do not put the diagnostics token in frontend configuration or commit it. The dashboard prompts for
+the token and sends it only to the backend diagnostics API. Public health responses are minimal;
+detailed results omit connection strings and exception traces. The in-memory rate limit and
+correlation results are per serverless instance and may not be shared across Vercel requests.
+
+The dashboard's browser check requests the configured absolute backend URL with credentials and a
+custom header, which triggers a browser CORS preflight when the page and backend are cross-origin.
+Because `/test` is hosted by the backend, a same-origin dashboard/backend pair cannot exercise
+cross-origin CORS in that browser; that check is explicitly shown as skipped. The deployment
+configuration check still verifies that the configured frontend origin is listed in `CORS_ORIGINS`.
+For an actual frontend-origin browser test, run the browser probe from a page served by the frontend
+origin.
+
+Deploy through the existing `backend/vercel.json` configuration; no extra Vercel route or database
+migration is needed. After setting environment variables, redeploy and open the backend deployment's
+`/test` URL. Run backend tests with `cd backend && python -m pytest`.
 
 ## Image storage
 
