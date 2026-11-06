@@ -45,8 +45,6 @@ from app.repositories.admin_repository import (
     write_audit_event,
 )
 from app.services.admin_service import (
-    REMEMBERED_SESSION_DURATION_SECONDS,
-    SESSION_DURATION_SECONDS,
     authenticate_admin,
     create_password_hash,
 )
@@ -103,13 +101,16 @@ def _error(
 
 
 def _set_session_cookie(response: Response, token: str, remember: bool) -> None:
-    max_age = (
-        REMEMBERED_SESSION_DURATION_SECONDS if remember else SESSION_DURATION_SECONDS
+    settings = get_settings()
+    duration_minutes = (
+        settings.remembered_session_duration_minutes
+        if remember
+        else settings.session_duration_minutes
     )
     response.set_cookie(
         key=get_settings().session_cookie_name,
         value=token,
-        max_age=max_age,
+        max_age=duration_minutes * 60,
         path="/",
         httponly=True,
         secure=get_settings().secure_cookies,

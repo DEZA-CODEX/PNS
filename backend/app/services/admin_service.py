@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.exceptions import AdminAuthError
 from app.core.security import hash_password, hash_session_token, new_session_token, verify_password
 from app.repositories.admin_repository import (
@@ -16,9 +17,6 @@ from app.repositories.admin_repository import (
     update_super_admin_login,
     write_audit_event,
 )
-
-SESSION_DURATION_SECONDS = 60 * 60 * 8
-REMEMBERED_SESSION_DURATION_SECONDS = 60 * 60 * 24 * 30
 
 
 def _validate_email(email: str) -> str:
@@ -98,15 +96,18 @@ async def authenticate_admin(
         }
         user_id = str(raw_user["id"])
 
-    remember_seconds = (
-        REMEMBERED_SESSION_DURATION_SECONDS if remember else SESSION_DURATION_SECONDS
+    settings = get_settings()
+    session_duration_minutes = (
+        settings.remembered_session_duration_minutes
+        if remember
+        else settings.session_duration_minutes
     )
     token = new_session_token()
     await create_admin_session(
         db,
         user_id,
         hash_session_token(token),
-        now_utc() + timedelta(seconds=remember_seconds),
+        now_utc() + timedelta(minutes=session_duration_minutes),
     )
     await update_admin_login(db, user_id)
     await write_audit_event(

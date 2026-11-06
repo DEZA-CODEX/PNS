@@ -62,6 +62,16 @@ class Settings(BaseSettings):
         default="../public/uploads", validation_alias="PNS_IMAGE_STORAGE_DIR"
     )
     session_cookie_name: str = "pns_admin_session"
+    session_duration_minutes: int = Field(
+        default=8 * 60,
+        validation_alias="PNS_SESSION_DURATION_MINUTES",
+        gt=0,
+    )
+    remembered_session_duration_minutes: int = Field(
+        default=30 * 24 * 60,
+        validation_alias="PNS_REMEMBERED_SESSION_DURATION_MINUTES",
+        gt=0,
+    )
     secure_cookies: bool | None = Field(
         default=None, validation_alias="PNS_SECURE_COOKIES"
     )

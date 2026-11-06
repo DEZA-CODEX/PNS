@@ -18,6 +18,8 @@ values must never be copied into the frontend environment.
 | `PNS_SECURE_COOKIES`       | FastAPI      | Explicitly overrides the Secure cookie flag. Use `true` over HTTPS.                                      |
 | `PNS_COOKIE_SAMESITE`      | FastAPI      | `lax` by default; use `none` only for cross-site HTTPS deployments.                                      |
 | `PNS_COOKIE_DOMAIN`        | FastAPI      | Optional cookie domain, e.g. a shared parent domain for frontend/API subdomains.                         |
+| `PNS_SESSION_DURATION_MINUTES` | FastAPI  | Admin session lifetime in minutes; defaults to `480` (8 hours).                                          |
+| `PNS_REMEMBERED_SESSION_DURATION_MINUTES` | FastAPI | Admin “Remember me” lifetime in minutes; defaults to `43200` (30 days).                    |
 
 `NEXT_PUBLIC_API_BASE_URL` is public and is compiled into the Next.js build. Do not put database
 URLs, service-role keys, or any secret in a `NEXT_PUBLIC_*` variable.
@@ -66,6 +68,8 @@ PNS_ALLOWED_HOSTS=your-backend-hostname.example
 DATABASE_URL=your-database-url
 PNS_SECURE_COOKIES=true
 PNS_COOKIE_SAMESITE=none
+PNS_SESSION_DURATION_MINUTES=480
+PNS_REMEMBERED_SESSION_DURATION_MINUTES=43200
 ```
 
 Keep the real database URL only in the backend environment. Set `REDIS_URL` only when a shared
