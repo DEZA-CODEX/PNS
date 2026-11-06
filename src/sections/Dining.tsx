@@ -10,7 +10,7 @@ const diningTypeByCard: Record<string, DiningType> = {
 };
 
 export function Dining() {
-  const { images: diningImages } = useDiningImageLibrary();
+  const { images: diningImages } = useDiningImageLibrary("/images/homepage");
   return (
     <section id="dine" className="relative py-28 lg:py-40">
       <div className="mx-auto max-w-[1400px] px-6 lg:px-12">

@@ -21,7 +21,7 @@ function setPanelTilt(element: HTMLElement, event: PointerEvent<HTMLElement>) {
 }
 
 export function DiningPreview() {
-  const { images: diningImages } = useDiningImageLibrary();
+  const { images: diningImages } = useDiningImageLibrary("/images/homepage");
   const [activeIndex, setActiveIndex] = useState(0);
   const swipeStart = useRef<number | null>(null);
   const orderedDining = useMemo(

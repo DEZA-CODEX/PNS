@@ -30,7 +30,7 @@ import diningCloud9 from "@/assets/dining-cloud9.jpg";
 import diningVrindavan from "@/assets/dining-vrindavan.jpg";
 import clinqLounge from "@/assets/clinq-lounge.jpg";
 import eventsBanquet from "@/assets/events-banquet.jpg";
-import { useDiningImageLibrary } from "@/hooks/useDiningImages";
+import { useAboutImages } from "@/hooks/useAboutImages";
 import { diningImageRepository, getSelectedDiningImages } from "@/services/roomImageRepository";
 
 const AboutScene = dynamic(() => import("@/three/AboutScene"), {
@@ -142,7 +142,7 @@ const services = [
 
 export function AboutUs() {
   const [booking, setBooking] = useState(false);
-  const { images: diningImageLibrary } = useDiningImageLibrary();
+  const { images: diningImageLibrary } = useAboutImages();
   const aboutDiningImage = (name: string) => {
     const diningType =
       name === "VRINDAVAN"

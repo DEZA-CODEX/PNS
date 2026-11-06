@@ -79,6 +79,144 @@ async def list_managed_images(
     return images, hidden_bundled_ids
 
 
+async def list_collection_managed_images(
+    db: AsyncSession,
+    collection: str,
+    categories: tuple[str, ...],
+) -> dict[str, dict[str, list[dict[str, Any]]] | list[str]]:
+    """Load all active images and bundled overrides for a collection in two queries."""
+    category_params = {f"category_{index}": category for index, category in enumerate(categories)}
+    placeholders = ", ".join(f":category_{index}" for index in range(len(categories)))
+    params = {"collection": collection, **category_params}
+    result = await db.execute(
+        text(
+            f"""
+            SELECT id, category_id, public_url, storage_path, source_type,
+                   image_data IS NOT NULL AS has_database_content,
+                   display_location, display_order, is_active, updated_at
+              FROM public.managed_images
+             WHERE category_type = :collection
+               AND category_id IN ({placeholders})
+               AND is_active
+             ORDER BY category_id, display_order, created_at
+            """
+        ),
+        params,
+    )
+    images: dict[str, list[dict[str, Any]]] = {category: [] for category in categories}
+    for row in result.mappings():
+        mapped = dict(row)
+        images.setdefault(str(mapped["category_id"]), []).append(_image(mapped))
+
+    hidden_result = await db.execute(
+        text(
+            f"""
+            SELECT category_id, legacy_id
+              FROM public.managed_images
+             WHERE category_type = :collection
+               AND category_id IN ({placeholders})
+               AND source_type = 'bundled'
+               AND NOT is_active
+               AND legacy_id IS NOT NULL
+             ORDER BY category_id, legacy_id
+            """
+        ),
+        params,
+    )
+    disabled: dict[str, list[str]] = {category: [] for category in categories}
+    for row in hidden_result.mappings():
+        mapped = dict(row)
+        disabled.setdefault(str(mapped["category_id"]), []).append(str(mapped["legacy_id"]))
+    return {"images": images, "disabledBundledIds": disabled}
+
+
+async def list_homepage_managed_images(
+    db: AsyncSession,
+) -> dict[str, dict[str, dict[str, list[dict[str, Any]]]]]:
+    result = await db.execute(
+        text(
+            """
+            SELECT id, category_type, category_id, public_url, storage_path, source_type,
+                   image_data IS NOT NULL AS has_database_content,
+                   display_location, display_order, is_active, updated_at
+              FROM public.managed_images
+             WHERE category_type IN ('room', 'dining') AND is_active
+             ORDER BY category_type, category_id, display_order, created_at
+            """
+        )
+    )
+    images: dict[str, dict[str, list[dict[str, Any]]]] = {"room": {}, "dining": {}}
+    for row in result.mappings():
+        mapped = dict(row)
+        collection = str(mapped["category_type"])
+        category = str(mapped["category_id"])
+        images[collection].setdefault(category, []).append(_image(mapped))
+
+    hidden_result = await db.execute(
+        text(
+            """
+            SELECT category_type, category_id, legacy_id
+              FROM public.managed_images
+             WHERE category_type IN ('room', 'dining')
+               AND source_type = 'bundled' AND NOT is_active AND legacy_id IS NOT NULL
+             ORDER BY category_type, category_id, legacy_id
+            """
+        )
+    )
+    disabled: dict[str, dict[str, list[str]]] = {"room": {}, "dining": {}}
+    for row in hidden_result.mappings():
+        mapped = dict(row)
+        collection = str(mapped["category_type"])
+        category = str(mapped["category_id"])
+        disabled[collection].setdefault(category, []).append(str(mapped["legacy_id"]))
+
+    return {
+        "images": images,
+        "disabledBundledIds": disabled,
+    }
+
+
+async def list_about_managed_images(
+    db: AsyncSession,
+) -> dict[str, dict[str, dict[str, list[dict[str, Any]]]]]:
+    result = await db.execute(
+        text(
+            """
+            SELECT id, category_type, category_id, public_url, storage_path, source_type,
+                   image_data IS NOT NULL AS has_database_content,
+                   display_location, display_order, is_active, updated_at
+              FROM public.managed_images
+             WHERE category_type = 'dining' AND is_active
+             ORDER BY category_id, display_order, created_at
+            """
+        )
+    )
+    images: dict[str, dict[str, list[dict[str, Any]]]] = {"dining": {}}
+    for row in result.mappings():
+        mapped = dict(row)
+        category = str(mapped["category_id"])
+        images["dining"].setdefault(category, []).append(_image(mapped))
+
+    hidden_result = await db.execute(
+        text(
+            """
+            SELECT category_type, category_id, legacy_id
+              FROM public.managed_images
+             WHERE category_type = 'dining'
+               AND source_type = 'bundled' AND NOT is_active AND legacy_id IS NOT NULL
+             ORDER BY category_id, legacy_id
+            """
+        )
+    )
+    disabled: dict[str, dict[str, list[str]]] = {"dining": {}}
+    for row in hidden_result.mappings():
+        mapped = dict(row)
+        category = str(mapped["category_id"])
+        disabled["dining"].setdefault(category, []).append(str(mapped["legacy_id"]))
+
+    return {"images": images, "disabledBundledIds": disabled}
+
+
 async def get_managed_image(
     db: AsyncSession, collection: str, category: str, image_id: str
 ) -> dict[str, Any] | None:

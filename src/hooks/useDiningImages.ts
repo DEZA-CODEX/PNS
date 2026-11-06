@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { diningImageRepository, getSelectedDiningImages } from "@/services/roomImageRepository";
+import {
+  diningImageRepository,
+  getSelectedDiningImages,
+  refreshHomepageImages,
+  refreshSectionImages,
+} from "@/services/roomImageRepository";
 import type {
   DiningImage,
   DiningImageDestination,
@@ -17,7 +22,7 @@ const EMPTY_RESULT: DiningImageLoadResult = {
   },
 };
 
-export function useDiningImageLibrary() {
+export function useDiningImageLibrary(apiEndpoint = "/images/dining") {
   const [result, setResult] = useState<DiningImageLoadResult>(EMPTY_RESULT);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,7 +30,7 @@ export function useDiningImageLibrary() {
     let mounted = true;
     const load = () => {
       void diningImageRepository
-        .listImages()
+        .listImages(apiEndpoint)
         .then((loaded) => {
           if (!mounted) return;
           setResult(loaded);
@@ -44,9 +49,21 @@ export function useDiningImageLibrary() {
     const unsubscribe = diningImageRepository.subscribe(load);
     const onManagedImagesChanged = (event: Event) => {
       const collection = (event as CustomEvent<{ collection?: string }>).detail?.collection;
-      if (!collection || collection === "dining") load();
+      if (!collection || collection === "dining") {
+        void (
+          apiEndpoint === "/images/homepage"
+            ? refreshHomepageImages()
+            : refreshSectionImages("dining")
+        ).then(() => load());
+      }
     };
-    const onFocus = () => load();
+    const onFocus = () => {
+      void (
+        apiEndpoint === "/images/homepage"
+          ? refreshHomepageImages()
+          : refreshSectionImages("dining")
+      ).then(() => load());
+    };
     window.addEventListener("pns-managed-images-changed", onManagedImagesChanged);
     window.addEventListener("focus", onFocus);
     return () => {
@@ -56,7 +73,7 @@ export function useDiningImageLibrary() {
       unsubscribe();
       window.removeEventListener("pns-managed-images-changed", onManagedImagesChanged);
     };
-  }, []);
+  }, [apiEndpoint]);
 
   return { ...result, error };
 }

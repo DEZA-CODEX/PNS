@@ -50,6 +50,79 @@ const DEFAULT_SELECTIONS: RoomImageSelections = {
 
 const discoveredAssets = roomImageAssets;
 
+type HomepageImagePayload = {
+  images?: Record<
+    "room" | "dining",
+    Record<
+      string,
+      Array<{
+        id: string;
+        category: string;
+        url: string;
+        path: string | null;
+        sourceType: "bundled" | "upload" | "external";
+        filename: string | null;
+      }>
+    >
+  >;
+  disabledBundledIds?: Record<"room" | "dining", Record<string, string[]>>;
+};
+
+let homepageCache: HomepageImagePayload | null = null;
+let homepageCacheAt = 0;
+let homepageRequest: Promise<HomepageImagePayload> | null = null;
+
+async function getImagePayload(endpoint: string, collection: "room" | "dining") {
+  if (endpoint === "/images/homepage") {
+    if (homepageCache && Date.now() - homepageCacheAt < 15_000) return homepageCache;
+    if (homepageRequest) return homepageRequest;
+  }
+
+  const request = apiFetch(endpoint).then(async (response) => {
+    if (!response.ok) {
+      throw new RoomImageRepositoryError(`${collection} images could not be loaded.`);
+    }
+    const payload = (await response.json()) as HomepageImagePayload;
+    const images = payload.images ?? {};
+    const disabledBundledIds = payload.disabledBundledIds ?? {};
+    if (!(collection in images)) {
+      payload.images = {
+        [collection]: images,
+      } as NonNullable<HomepageImagePayload["images"]>;
+      payload.disabledBundledIds = {
+        [collection]: disabledBundledIds,
+      } as NonNullable<HomepageImagePayload["disabledBundledIds"]>;
+    }
+    return payload;
+  });
+
+  if (endpoint !== "/images/homepage") return request;
+  homepageRequest = request
+    .then((payload) => {
+      homepageCache = payload;
+      homepageCacheAt = Date.now();
+      return payload;
+    })
+    .finally(() => {
+      homepageRequest = null;
+    });
+  return homepageRequest;
+}
+
+async function getHomepageImages(): Promise<HomepageImagePayload> {
+  return getImagePayload("/images/homepage", "room");
+}
+
+export function refreshHomepageImages() {
+  homepageCache = null;
+  homepageCacheAt = 0;
+  return getHomepageImages();
+}
+
+export function refreshSectionImages(collection: "room" | "dining") {
+  return getImagePayload(`/images/${collection === "room" ? "rooms" : "dining"}`, collection);
+}
+
 type PersistedSettings = {
   version: number;
   images: Record<string, RoomImageSettingsRecord>;
@@ -246,37 +319,18 @@ function createLoadResult(): RoomImageLoadResult {
   return { images, warnings };
 }
 
-async function mergeServerRoomImages(result: RoomImageLoadResult) {
+async function mergeServerRoomImages(result: RoomImageLoadResult, endpoint = "/images/homepage") {
   if (typeof window === "undefined") return result;
   try {
-    const responses = await Promise.all(
-      ROOM_TYPES.map((roomType) => apiFetch(`/images/room?type=${roomType}`)),
-    );
-    const payloads = await Promise.all(
-      responses.map((response) =>
-        response.ok
-          ? (response.json() as Promise<{
-              images?: Array<{
-                id: string;
-                category: string;
-                url: string;
-                path: string | null;
-                sourceType: "bundled" | "upload" | "external";
-                filename: string | null;
-              }>;
-              disabledBundledIds?: string[];
-            }>)
-          : null,
-      ),
-    );
+    const payload = await getImagePayload(endpoint, "room");
     const bundledIds = new Set(createDiscoveredImages().map((image) => image.id));
     const disabledBundledIds = new Set(
-      payloads.flatMap((payload) => payload?.disabledBundledIds ?? []),
+      ROOM_TYPES.flatMap((roomType) => payload.disabledBundledIds?.room?.[roomType] ?? []),
     );
     result.images = result.images.filter(
       (image) => !bundledIds.has(image.id) || !disabledBundledIds.has(image.id),
     );
-    for (const image of payloads.flatMap((payload) => payload?.images ?? [])) {
+    for (const image of ROOM_TYPES.flatMap((roomType) => payload.images?.room?.[roomType] ?? [])) {
       if (result.images.some((current) => current.id === image.id)) continue;
       result.images.push({
         id: image.id,
@@ -326,8 +380,8 @@ export class LocalRoomImageRepository implements RoomImageRepository {
     }
   }
 
-  async listImages(): Promise<RoomImageLoadResult> {
-    return mergeServerRoomImages(createLoadResult());
+  async listImages(endpoint = "/images/homepage"): Promise<RoomImageLoadResult> {
+    return mergeServerRoomImages(createLoadResult(), endpoint);
   }
 
   async updateSelection(
@@ -605,37 +659,23 @@ function createDiningLoadResult(): DiningImageLoadResult {
   return { images, warnings: saved.warnings, displayCounts: counts };
 }
 
-async function mergeServerDiningImages(result: DiningImageLoadResult) {
+async function mergeServerDiningImages(
+  result: DiningImageLoadResult,
+  endpoint = "/images/homepage",
+) {
   if (typeof window === "undefined") return result;
   try {
-    const responses = await Promise.all(
-      DINING_TYPES.map((diningType) => apiFetch(`/images/dining?type=${diningType}`)),
-    );
-    const payloads = await Promise.all(
-      responses.map((response) =>
-        response.ok
-          ? (response.json() as Promise<{
-              images?: Array<{
-                id: string;
-                category: string;
-                url: string;
-                path: string | null;
-                sourceType: "bundled" | "upload" | "external";
-                filename: string | null;
-              }>;
-              disabledBundledIds?: string[];
-            }>)
-          : null,
-      ),
-    );
+    const payload = await getImagePayload(endpoint, "dining");
     const bundledIds = new Set(createDiscoveredDiningImages().map((image) => image.id));
     const disabledBundledIds = new Set(
-      payloads.flatMap((payload) => payload?.disabledBundledIds ?? []),
+      DINING_TYPES.flatMap((diningType) => payload.disabledBundledIds?.dining?.[diningType] ?? []),
     );
     result.images = result.images.filter(
       (image) => !bundledIds.has(image.id) || !disabledBundledIds.has(image.id),
     );
-    for (const image of payloads.flatMap((payload) => payload?.images ?? [])) {
+    for (const image of DINING_TYPES.flatMap(
+      (diningType) => payload.images?.dining?.[diningType] ?? [],
+    )) {
       if (result.images.some((current) => current.id === image.id)) continue;
       const diningType = image.category as DiningType;
       result.images.push({
@@ -687,8 +727,12 @@ export class LocalDiningImageRepository implements DiningImageRepository {
     }
   }
 
-  async listImages() {
-    return mergeServerDiningImages(createDiningLoadResult());
+  async listImages(endpoint = "/images/homepage") {
+    return mergeServerDiningImages(createDiningLoadResult(), endpoint);
+  }
+
+  async listAboutImages() {
+    return mergeServerDiningImages(createDiningLoadResult(), "/images/about");
   }
 
   async updateSelection(imageId: string, destination: DiningImageDestination, selected: boolean) {

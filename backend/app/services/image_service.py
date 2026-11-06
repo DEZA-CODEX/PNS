@@ -22,6 +22,9 @@ from app.repositories.image_repository import (
     disable_managed_image,
     get_managed_image,
     get_managed_image_content,
+    list_about_managed_images,
+    list_collection_managed_images,
+    list_homepage_managed_images,
     list_managed_images,
     save_managed_image,
     update_managed_image,
@@ -94,6 +97,20 @@ async def list_images(
 ) -> tuple[list[dict], list[str]]:
     validate_collection_category(collection, category)
     return await list_managed_images(db, collection, category, display_location)
+
+
+async def list_homepage_images(db: AsyncSession) -> dict:
+    return await list_homepage_managed_images(db)
+
+
+async def list_about_images(db: AsyncSession) -> dict:
+    return await list_about_managed_images(db)
+
+
+async def list_section_images(
+    db: AsyncSession, collection: str, categories: tuple[str, ...]
+) -> dict:
+    return await list_collection_managed_images(db, collection, categories)
 
 
 async def add_external_image(

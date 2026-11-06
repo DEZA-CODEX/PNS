@@ -40,7 +40,7 @@ export type RoomImageSettingsRecord = {
 };
 
 export type RoomImageRepository = {
-  listImages(): Promise<RoomImageLoadResult>;
+  listImages(endpoint?: string): Promise<RoomImageLoadResult>;
   updateSelection(
     imageId: string,
     destination: RoomImageDestination,
@@ -105,7 +105,8 @@ export type DiningImageLoadResult = {
 };
 
 export type DiningImageRepository = {
-  listImages(): Promise<DiningImageLoadResult>;
+  listImages(endpoint?: string): Promise<DiningImageLoadResult>;
+  listAboutImages(): Promise<DiningImageLoadResult>;
   updateSelection(
     imageId: string,
     destination: DiningImageDestination,
