@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import logo from "@/assets/pns logo.png";
 import logoWebp from "@/assets/pns-logo.webp";
+import { roomCategories } from "@/data/rooms";
 
 const links = [
   { label: "Home", href: "/" },
@@ -15,15 +16,42 @@ const links = [
   { label: "Contact", href: "/contact" },
 ];
 
+const galleryLinks = [
+  { label: "Rooms", href: "/rooms" },
+  { label: "Banquet", href: "/banquet" },
+  { label: "Dining", href: "/dining" },
+];
+
+const diningLinks = [
+  { label: "Vrindavan", href: "/dining#vrindavan", description: "Veg fine dining" },
+  { label: "Cloud 9", href: "/dining#cloud-9", description: "Rooftop restaurant" },
+  { label: "Clinq", href: "/dining#clinq", description: "Casual bar & lounge" },
+];
+
+const roomLinks = roomCategories.map((room) => ({
+  label: room.name,
+  href: "/rooms#rooms",
+  description: room.category,
+}));
+
 export function Navbar({ onBook }: { onBook: () => void }) {
   const [solid, setSolid] = useState(false);
   const [open, setOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
     const onScroll = () => setSolid(window.scrollY > 80);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setGalleryOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   return (
@@ -52,33 +80,65 @@ export function Navbar({ onBook }: { onBook: () => void }) {
         <ul className="hidden items-center gap-[clamp(1.25rem,3vw,2.5rem)] lg:flex">
           {links.map((l) => (
             <li key={l.href}>
-              <div className="group relative">
-                <a
-                  href={l.href}
-                  className={`eyebrow text-[calc(var(--type-label)_+_2px)] transition-colors underline-offset-4 decoration-[1px] hover:text-[#000000] hover:underline lg:text-[calc(0.78rem_+_2px)] ${pathname === l.href ? "text-[#000000] underline" : ""}`}
-                  data-cursor="View"
-                >
-                  {l.label}
-                </a>
-                {l.label === "Dining" ? (
-                  <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-4 w-52 -translate-x-1/2 translate-y-2 border border-gold/40 bg-[var(--color-navy)] p-3 opacity-0 shadow-[var(--shadow-cinema)] transition-all group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100">
-                    {["vrindavan", "cloud-9", "clinq"].map((section) => (
+              <div
+                className={`group relative ${l.label === "Gallery" && galleryOpen ? "is-open" : ""}`}
+              >
+                {l.label === "Gallery" ? (
+                  <a
+                    href={l.href}
+                    className={`eyebrow text-[calc(var(--type-label)_+_2px)] transition-colors underline-offset-4 decoration-[1px] hover:text-[#000000] hover:underline lg:text-[calc(0.78rem_+_2px)] ${pathname === l.href ? "text-[#000000] underline" : ""}`}
+                    data-cursor=""
+                  >
+                    {l.label}
+                  </a>
+                ) : (
+                  <a
+                    href={l.href}
+                    className={`eyebrow text-[calc(var(--type-label)_+_2px)] transition-colors underline-offset-4 decoration-[1px] hover:text-[#000000] hover:underline lg:text-[calc(0.78rem_+_2px)] ${pathname === l.href ? "text-[#000000] underline" : ""}`}
+                    data-cursor=""
+                  >
+                    {l.label}
+                  </a>
+                )}
+                {l.label === "Gallery" ? (
+                  <div className="pointer-events-none absolute left-1/2 top-full z-[70] mt-0 w-44 -translate-x-1/2 translate-y-2 border border-gold/40 bg-[var(--color-navy)] p-2 opacity-0 shadow-[var(--shadow-cinema)] transition-all group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100 group-[.is-open]:pointer-events-auto group-[.is-open]:translate-y-0 group-[.is-open]:opacity-100">
+                    {galleryLinks.map((item) => (
                       <a
-                        key={section}
-                        href={`/dining#${section}`}
-                        className="group/dropdown-item block px-3 py-2 text-[calc(0.75rem_+_2px)] font-semibold uppercase tracking-[0.12em] text-[var(--color-ivory)] transition-colors underline-offset-2 decoration-[1px] hover:bg-[color-mix(in_oklab,var(--color-ivory)_10%,transparent)] hover:text-gold hover:underline"
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setGalleryOpen(false)}
+                        className="block px-3 py-2.5 text-[calc(0.75rem_+_2px)] font-semibold uppercase tracking-[0.12em] text-[var(--color-ivory)] transition-colors underline-offset-2 decoration-[1px] hover:bg-[color-mix(in_oklab,var(--color-ivory)_10%,transparent)] hover:text-gold hover:underline focus-visible:bg-[color-mix(in_oklab,var(--color-ivory)_10%,transparent)] focus-visible:text-gold"
                       >
-                        <span className="block">
-                          {section === "cloud-9"
-                            ? "Cloud 9"
-                            : section.charAt(0).toUpperCase() + section.slice(1)}
-                        </span>
+                        {item.label}
+                      </a>
+                    ))}
+                  </div>
+                ) : l.label === "Dining" ? (
+                  <div className="pointer-events-none absolute left-1/2 top-full z-[70] mt-0 w-52 -translate-x-1/2 translate-y-2 border border-gold/40 bg-[var(--color-navy)] p-3 opacity-0 shadow-[var(--shadow-cinema)] transition-all group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100">
+                    {diningLinks.map((item) => (
+                      <a
+                        key={item.href}
+                        href={item.href}
+                        className="group/dropdown-item block px-3 py-2 text-[calc(0.75rem_+_2px)] font-semibold uppercase tracking-[0.12em] text-[var(--color-ivory)] transition-colors underline-offset-2 decoration-[1px] hover:bg-[color-mix(in_oklab,var(--color-ivory)_10%,transparent)] hover:text-gold hover:underline focus-visible:bg-[color-mix(in_oklab,var(--color-ivory)_10%,transparent)] focus-visible:text-gold"
+                      >
+                        <span className="block">{item.label}</span>
                         <span className="mt-1 block text-[calc(0.6rem_+_2px)] font-normal tracking-[0.08em] text-[var(--color-ivory)]/70 group-hover/dropdown-item:text-[var(--color-ivory)]">
-                          {section === "vrindavan"
-                            ? "Veg fine dining"
-                            : section === "cloud-9"
-                              ? "Rooftop restaurant"
-                              : "Casual bar & lounge"}
+                          {item.description}
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                ) : l.label === "Rooms" ? (
+                  <div className="pointer-events-none absolute left-1/2 top-full z-[70] mt-0 w-52 -translate-x-1/2 translate-y-2 border border-gold/40 bg-[var(--color-navy)] p-3 opacity-0 shadow-[var(--shadow-cinema)] transition-all group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100">
+                    {roomLinks.map((item) => (
+                      <a
+                        key={item.label}
+                        href={item.href}
+                        className="group/dropdown-item block px-3 py-2 text-[calc(0.75rem_+_2px)] font-semibold uppercase tracking-[0.12em] text-[var(--color-ivory)] transition-colors underline-offset-2 decoration-[1px] hover:bg-[color-mix(in_oklab,var(--color-ivory)_10%,transparent)] hover:text-gold hover:underline focus-visible:bg-[color-mix(in_oklab,var(--color-ivory)_10%,transparent)] focus-visible:text-gold"
+                      >
+                        <span className="block">{item.label}</span>
+                        <span className="mt-1 block text-[calc(0.6rem_+_2px)] font-normal tracking-[0.08em] text-[var(--color-ivory)]/70 group-hover/dropdown-item:text-[var(--color-ivory)]">
+                          {item.description}
                         </span>
                       </a>
                     ))}
@@ -92,7 +152,7 @@ export function Navbar({ onBook }: { onBook: () => void }) {
         <div className="flex items-center gap-4">
           <button
             onClick={onBook}
-            data-cursor="Book"
+            data-cursor=""
             className="luxury-button luxury-button-hover hidden px-5 py-2.5 lg:block"
           >
             Book your stay
@@ -119,16 +179,68 @@ export function Navbar({ onBook }: { onBook: () => void }) {
           open ? "flex" : "hidden"
         }`}
       >
-        {links.map((l) => (
-          <a
-            key={l.href}
-            href={l.href}
-            className={`eyebrow text-[calc(var(--type-label)_+_2px)] transition-colors underline-offset-4 decoration-[1px] hover:text-[#000000] hover:underline ${pathname === l.href ? "text-[#000000] underline" : ""}`}
-            onClick={() => setOpen(false)}
-          >
-            {l.label}
-          </a>
-        ))}
+        {links.map((l) =>
+          l.label === "Gallery" ? (
+            <div key={l.href} className="border-b border-gold/20 pb-4">
+              <button
+                type="button"
+                aria-expanded={galleryOpen}
+                aria-haspopup="true"
+                onClick={() => setGalleryOpen((value) => !value)}
+                className="eyebrow text-[calc(var(--type-label)_+_2px)] transition-colors hover:text-[#000000]"
+                data-cursor=""
+              >
+                Gallery
+              </button>
+              {galleryOpen ? (
+                <div className="mt-3 grid grid-cols-3 gap-2 pl-3">
+                  {galleryLinks.map((item) => (
+                    <a
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setOpen(false)}
+                      className="eyebrow text-[calc(var(--type-label)_+_2px)] text-[var(--color-navy-soft)] transition-colors hover:text-[var(--color-navy)] hover:underline"
+                    >
+                      {item.label}
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : l.label === "Rooms" ? (
+            <div key={l.href} className="border-b border-gold/20 pb-4">
+              <a
+                href={l.href}
+                className={`eyebrow text-[calc(var(--type-label)_+_2px)] transition-colors hover:text-[#000000] ${pathname === l.href ? "text-[#000000] underline" : ""}`}
+                data-cursor=""
+              >
+                Rooms
+              </a>
+              <div className="mt-3 grid grid-cols-2 gap-2 pl-3">
+                {roomLinks.map((item) => (
+                  <a
+                    key={item.label}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className="eyebrow text-[calc(var(--type-label)_+_2px)] text-[var(--color-navy-soft)] transition-colors hover:text-[var(--color-navy)] hover:underline"
+                  >
+                    {item.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <a
+              key={l.href}
+              href={l.href}
+              className={`eyebrow text-[calc(var(--type-label)_+_2px)] transition-colors underline-offset-4 decoration-[1px] hover:text-[#000000] hover:underline ${pathname === l.href ? "text-[#000000] underline" : ""}`}
+              onClick={() => setOpen(false)}
+              data-cursor=""
+            >
+              {l.label}
+            </a>
+          ),
+        )}
         <div className="border-t border-gold/20 pt-4">
           <p className="eyebrow text-ink">Dining</p>
           <div className="mt-2 grid grid-cols-3 gap-2">

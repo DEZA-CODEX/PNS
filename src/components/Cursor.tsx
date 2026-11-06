@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 export function Cursor() {
   const dot = useRef<HTMLDivElement>(null);
   const [label, setLabel] = useState<string | null>(null);
+  const [active, setActive] = useState(false);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -22,6 +23,7 @@ export function Cursor() {
       y = e.clientY;
       setVisible(true);
       const target = (e.target as HTMLElement)?.closest?.("[data-cursor]") as HTMLElement | null;
+      setActive(Boolean(target));
       setLabel(target?.dataset["cursor"] ?? null);
     };
 
@@ -49,7 +51,7 @@ export function Cursor() {
     >
       <div
         className={`-translate-x-1/2 -translate-y-1/2 rounded-full border border-gold/70 transition-all duration-300 ${
-          label ? "size-20 bg-gold/10" : "size-3 bg-gold/60"
+          active ? "size-20 bg-gold/10" : "size-3 bg-gold/60"
         } flex items-center justify-center`}
       >
         {label ? <span className="eyebrow text-[0.55rem] text-cream">{label}</span> : null}

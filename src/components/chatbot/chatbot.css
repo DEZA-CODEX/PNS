@@ -17,7 +17,7 @@
   width: min(92vw, 390px);
   height: min(68vh, 360px);
   max-height: 420px;
-  border-radius: 56px;
+  border-radius: 1.5rem;
   background: rgba(23, 35, 66, 0.96);
   border: 1px solid color-mix(in oklab, var(--gold) 35%, rgba(255, 255, 255, 0.1));
   box-shadow:
@@ -34,6 +34,7 @@
   opacity: 1;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  font-family: var(--font-sans);
 }
 
 .chatbot-window.is-opening {
@@ -90,7 +91,7 @@
 .chatbot-close {
   width: 34px;
   height: 34px;
-  border-radius: 9999px;
+  border-radius: 0.5rem;
   border: 1px solid color-mix(in oklab, var(--gold) 30%, rgba(255, 255, 255, 0.08));
   background: rgba(255, 255, 255, 0.03);
   color: var(--color-ivory);
@@ -145,7 +146,7 @@
 }
 
 .chatbot-bubble {
-  border-radius: 20px;
+  border-radius: 0.75rem;
   padding: 11px 14px 10px;
   font-size: 0.82rem;
   line-height: 1.5;
@@ -182,7 +183,7 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(243, 248, 250, 0.08);
   color: var(--color-ivory);
-  border-radius: 9999px;
+  border-radius: 0.5rem;
   padding: 11px 14px;
   font-size: 0.85rem;
   font-family: var(--font-sans);
@@ -199,7 +200,7 @@
   width: 42px;
   height: 42px;
   border: none;
-  border-radius: 9999px;
+  border-radius: 0.5rem;
   background: var(--gold);
   color: var(--color-navy);
   box-shadow: 0 10px 20px -12px rgba(207, 140, 85, 0.8);
@@ -259,7 +260,7 @@
   .chatbot-window {
     width: min(90vw, 360px);
     height: min(62vh, 300px);
-    border-radius: 40px;
+    border-radius: 1.5rem;
   }
 
   .chatbot-header {
