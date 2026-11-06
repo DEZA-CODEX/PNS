@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-import logging
 
 from app.core.config import database_url_for_asyncpg, get_settings
 from app.core.exceptions import ServiceUnavailableError
@@ -20,15 +19,17 @@ logger = logging.getLogger("pns.database")
 
 @lru_cache
 def get_engine() -> AsyncEngine | None:
-    raw_url = get_settings().database_url
+    settings = get_settings()
+    raw_url = settings.database_url
     if not raw_url:
         return None
     return create_async_engine(
         database_url_for_asyncpg(raw_url),
         pool_pre_ping=True,
-        pool_size=1,
-        max_overflow=0,
-        pool_recycle=500,
+        pool_size=settings.database_pool_size,
+        max_overflow=settings.database_max_overflow,
+        pool_recycle=settings.database_pool_recycle_seconds,
+        pool_timeout=settings.database_pool_timeout_seconds,
         connect_args={"statement_cache_size": 0},
     )
 

@@ -5,6 +5,7 @@ import base64
 import hashlib
 import io
 import json
+import socket
 from contextlib import asynccontextmanager
 from collections.abc import Iterator
 from datetime import datetime, timezone
@@ -414,6 +415,30 @@ def test_diagnostics_settings_validate_public_urls_and_timeout() -> None:
         Settings(_env_file=None, diagnostics_timeout_seconds=30)
     with pytest.raises(ValidationError):
         Settings(_env_file=None, diagnostics_token="short")
+
+
+def test_database_url_for_asyncpg_supports_direct_supabase_settings() -> None:
+    url = (
+        "postgresql://postgres.abc:super-secret-pass@db.abc.supabase.co:5432/postgres"
+        "?sslmode=require&pgbouncer=true&application_name=pns"
+    )
+    normalized = database_url_for_asyncpg(url)
+    assert normalized.startswith("postgresql+asyncpg://postgres.abc:super-secret-pass@db.abc.supabase.co:5432/postgres")
+    assert "ssl=require" in normalized
+    assert "pgbouncer=" not in normalized
+    assert "application_name=pns" in normalized
+    assert "super-secret-pass" in normalized
+
+
+def test_database_network_probe_sanitizes_dns_failures() -> None:
+    from app.api import diagnostics
+
+    probe = diagnostics._database_network_probe(
+        "postgresql://postgres.abc:super-secret-pass@db.abc.supabase.co:5432/postgres?sslmode=require"
+    )
+    assert probe["status"] in {"dns_failed", "resolved", "invalid_url", "missing_host"}
+    assert "super-secret-pass" not in str(probe)
+    assert diagnostics._classify_database_error(socket.gaierror(11001, "getaddrinfo failed"))[0] == "DNS_ERROR"
 
 
 def test_startup_continues_when_database_is_unreachable(

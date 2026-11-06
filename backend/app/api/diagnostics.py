@@ -163,6 +163,105 @@ def _error_category(error: BaseException) -> tuple[str, str, str]:
     return "UNKNOWN_ERROR", "The frontend connectivity check could not be completed.", "Review the configured frontend URL and deployment availability."
 
 
+def _classify_database_error(error: BaseException) -> tuple[str, str, str]:
+    seen: set[int] = set()
+    current: BaseException | None = error
+    chain: list[BaseException] = []
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+
+    if any(isinstance(item, ssl.SSLError) for item in chain):
+        return (
+            "TLS_ERROR",
+            "The PostgreSQL endpoint rejected or failed the TLS handshake.",
+            "Verify that the direct Supabase host is configured with sslmode=require and the runtime can establish TLS to the endpoint.",
+        )
+    if any(isinstance(item, socket.gaierror) for item in chain):
+        return (
+            "DNS_ERROR",
+            "The PostgreSQL hostname could not be resolved.",
+            "Verify the direct Supabase hostname and the runtime's DNS resolution for the selected Vercel environment.",
+        )
+    if any(isinstance(item, TimeoutError) or isinstance(item, socket.timeout) for item in chain):
+        return (
+            "CONNECTION_TIMEOUT",
+            "The PostgreSQL TCP connection timed out.",
+            "Check direct-host connectivity, Vercel network restrictions, and whether IPv6 is available for the configured endpoint.",
+        )
+    if any(isinstance(item, OSError) and getattr(item, "errno", None) in {101, 111, 61, 10061} for item in chain):
+        return (
+            "CONNECTION_REFUSED",
+            "The PostgreSQL server refused the network connection.",
+            "Confirm the Supabase direct host, port, and network access rules for the deployment environment.",
+        )
+    if any(
+        type(item).__name__ in {"InvalidPasswordError", "InvalidAuthorizationSpecificationError"}
+        for item in chain
+    ):
+        return (
+            "AUTH_ERROR",
+            "The PostgreSQL credentials are rejected by the database server.",
+            "Verify the direct connection username and password in the deployment environment without exposing stored secrets.",
+        )
+    return (
+        "DATABASE_ERROR",
+        "The PostgreSQL connection could not be established.",
+        "Inspect the direct database hostname, TLS configuration, and deployment network access before retrying.",
+    )
+
+
+def _database_network_probe(raw_url: str | None) -> dict[str, object]:
+    if not raw_url:
+        return {"status": "not_configured", "dns": "not_configured", "ipv6": "not_configured", "ipv4": "not_configured"}
+
+    try:
+        parts = urlsplit(raw_url)
+    except ValueError:
+        return {"status": "invalid_url", "dns": "invalid_url", "ipv6": "invalid_url", "ipv4": "invalid_url"}
+
+    host = parts.hostname
+    port = parts.port or 5432
+    if not host:
+        return {"status": "missing_host", "dns": "missing_host", "ipv6": "missing_host", "ipv4": "missing_host"}
+
+    try:
+        addrinfo = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except socket.gaierror as error:
+        return {
+            "status": "dns_failed",
+            "dns": "failed",
+            "ipv6": "not_resolved",
+            "ipv4": "not_resolved",
+            "error_category": "DNS_ERROR",
+            "message": "DNS resolution for the direct PostgreSQL hostname failed.",
+            "sanitized_error": str(error).split(":", 1)[0] if str(error) else "DNS resolution failed",
+        }
+
+    families = {info[0] for info in addrinfo}
+    probes: list[dict[str, object]] = []
+    for family, family_name in ((socket.AF_INET6, "ipv6"), (socket.AF_INET, "ipv4")):
+        if family not in families:
+            probes.append({"family": family_name, "status": "unsupported"})
+            continue
+
+        address = next(info[4][0] for info in addrinfo if info[0] == family)
+        try:
+            with socket.create_connection((address, port), timeout=5):
+                probes.append({"family": family_name, "status": "reachable"})
+        except socket.timeout:
+            probes.append({"family": family_name, "status": "timeout"})
+        except OSError as error:
+            probes.append({"family": family_name, "status": "refused", "error": getattr(error, "errno", None)})
+
+    network = {"status": "resolved", "dns": "ok", "ipv6": "unsupported", "ipv4": "unsupported"}
+    for probe in probes:
+        family = str(probe["family"])
+        network[family] = probe["status"]
+    return network
+
+
 async def _check_frontend(url: str, timeout_seconds: float) -> dict[str, object]:
     if not url:
         return _result(
@@ -357,6 +456,7 @@ async def run_backend_checks(
                     )
                 )
             else:
+                network_probe = _database_network_probe(settings.database_url)
                 try:
                     async with asyncio.timeout(settings.diagnostics_timeout_seconds):
                         async with engine.connect() as connection:
@@ -368,20 +468,22 @@ async def run_backend_checks(
                             target="PostgreSQL (credentials hidden)",
                             duration_ms=round((time.perf_counter() - database_started) * 1000),
                             message="PostgreSQL connection and SELECT 1 succeeded.",
-                            details={"connection_pool": engine.pool.status()},
+                            details={"connection_pool": engine.pool.status(), "network": network_probe},
                         )
                     )
-                except Exception:
+                except Exception as error:
                     logger.warning("PostgreSQL diagnostic query failed.")
+                    category, message, action = _classify_database_error(error)
                     results.append(
                         _result(
                             connection_name,
                             Status.FAIL,
                             target="PostgreSQL (credentials hidden)",
                             duration_ms=round((time.perf_counter() - database_started) * 1000),
-                            error_category="DATABASE_ERROR",
-                            message="The database connection or SELECT 1 query failed.",
-                            action="Verify DATABASE_URL and database network availability.",
+                            error_category=category,
+                            message=message,
+                            action=action,
+                            details={"network": network_probe},
                         )
                     )
 

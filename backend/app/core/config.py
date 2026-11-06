@@ -33,6 +33,30 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("DATABASE_URL", "SUPABASE_DB_URL"),
     )
+    database_pool_size: int = Field(
+        default=1,
+        validation_alias="PNS_DATABASE_POOL_SIZE",
+        gt=0,
+        le=10,
+    )
+    database_max_overflow: int = Field(
+        default=0,
+        validation_alias="PNS_DATABASE_MAX_OVERFLOW",
+        ge=0,
+        le=10,
+    )
+    database_pool_recycle_seconds: int = Field(
+        default=300,
+        validation_alias="PNS_DATABASE_POOL_RECYCLE_SECONDS",
+        gt=0,
+        le=3600,
+    )
+    database_pool_timeout_seconds: float = Field(
+        default=5.0,
+        validation_alias="PNS_DATABASE_POOL_TIMEOUT_SECONDS",
+        gt=0,
+        le=30,
+    )
     redis_url: str | None = Field(default=None, validation_alias="REDIS_URL")
     image_storage_dir: str = Field(
         default="../public/uploads", validation_alias="PNS_IMAGE_STORAGE_DIR"
@@ -212,9 +236,26 @@ def database_url_for_asyncpg(url: str) -> str:
     query = parse_qsl(parts.query, keep_blank_values=True)
     asyncpg_query: list[tuple[str, str]] = []
     for key, value in query:
-        if key == "sslmode":
+        normalized_key = key.lower()
+        if normalized_key == "sslmode":
             asyncpg_query.append(("ssl", value))
-        elif key != "pgbouncer":
+        elif normalized_key in {
+            "sslrootcert",
+            "sslcert",
+            "sslkey",
+            "application_name",
+            "connect_timeout",
+            "options",
+            "target_session_attrs",
+            "channel_binding",
+            "tcp_user_timeout",
+            "keepalives",
+            "keepalives_idle",
+            "keepalives_interval",
+            "keepalives_count",
+        }:
+            asyncpg_query.append((normalized_key, value))
+        elif normalized_key not in {"pgbouncer", "pooler"}:
             asyncpg_query.append((key, value))
     return urlunsplit(
         parts._replace(

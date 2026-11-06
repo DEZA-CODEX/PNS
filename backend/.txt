@@ -1,23 +1,46 @@
+APP_ENV=development
+FRONTEND_URL=https://literate-orbit-97rj9vv5qjxw3xx7w-3000.app.github.dev
+CORS_ORIGINS=deza-pns.vercel.app
+BACKEND_PUBLIC_URL=https://bd-pns.vercel.app/
+PNS_ALLOWED_HOSTS=bd-pns.vercel.app,deza-pns.vercel.app
+
+PNS_DIAGNOSTICS_TOKEN=f3207b8879e52e261d5eafa13b2ac6b9560b63661610a26081250c17a7afc3de
+
+
+
+#host=db.jfugjjnyhtzzagpkttgx.supabase.co
+#port=5432
+#database=postgres
+#user=postgres.jfugjjnyhtzzagpkttgx
+#password=Mohanbabu@2212
+DATABASE_URL=postgresql://postgres:Mohanbabu%402212@db.jfugjjnyhtzzagpkttgx.supabase.co:5432/postgres
+#postgresql://postgres.jfugjjnyhtzzagpkttgx:Mohanbabu%402212@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
+
+PNS_IMAGE_STORAGE_DIR=../public/uploads
+PNS_SECURE_COOKIES=true
+PNS_COOKIE_SAMESITE=none
+
 
 
 
 APP_ENV=development
-FRONTEND_URL=https://literate-orbit-97rj9vv5qjxw3xx7w-3000.app.github.dev
+FRONTEND_URL=http://localhost:3000
+CORS_ORIGINS=http://localhost:3000
+BACKEND_PUBLIC_URL= http://127.0.0.1:8000
+PNS_ALLOWED_HOSTS= http://127.0.0.1:8000,http://localhost:3000
 
-CORS_ORIGINS=https://literate-orbit-97rj9vv5qjxw3xx7w-3000.app.github.dev,http://localhost:3000
+PNS_DIAGNOSTICS_TOKEN=f3207b8879e52e261d5eafa13b2ac6b9560b63661610a26081250c17a7afc3de
 
 
-host=aws-0-ap-southeast-1.pooler.supabase.com
-port=5432
-database=postgres
-user=postgres.jfugjjnyhtzzagpkttgx
-password=Mohanbabu@2212
 
+#host=db.jfugjjnyhtzzagpkttgx.supabase.co
+#port=5432
+#database=postgres
+#user=postgres.jfugjjnyhtzzagpkttgx
+#password=Mohanbabu@2212
+#postgresql://postgres.jfugjjnyhtzzagpkttgx:Mohanbabu%402212@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
+DATABASE_URL=postgresql://postgres.jfugjjnyhtzzagpkttgx:Mohanbabu%402212@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
 
 PNS_IMAGE_STORAGE_DIR=../public/uploads
 PNS_SECURE_COOKIES=true
-PNS_COOKIE_SAMESITE=lax
-
-PNS_ALLOWED_HOSTS=*,localhost,127.0.0.1,testserver,literate-orbit-97rj9vv5qjxw3xx7w-8000.app.github.dev
-# PNS_IMAGE_STORAGE_BUCKET=your-existing-public-image-bucket
-DATABASE_URL=postgresql://postgres.jfugjjnyhtzzagpkttgx:Mohanbabu%402212@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
+PNS_COOKIE_SAMESITE=none

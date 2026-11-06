@@ -44,9 +44,9 @@ async def lifespan(_: FastAPI):
         except Exception:
             logger.exception(
                 "PostgreSQL is unreachable during startup. The API will start in "
-                "degraded mode; database routes will return 503. If this environment "
-                "does not support IPv6, use the Supabase session pooler connection "
-                "string from the project dashboard."
+                "degraded mode; database routes will return 503. Verify the direct "
+                "Supabase hostname, TLS settings, and IPv6/IPv4 compatibility for the "
+                "Vercel deployment environment."
             )
         else:
             logger.info("PostgreSQL connection pool is ready.")
