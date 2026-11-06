@@ -12,6 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.diagnostics import DIAGNOSTICS_DASHBOARD
@@ -80,9 +81,19 @@ async def request_context(request: Request, call_next):
 @fastapi_app.exception_handler(APIError)
 async def handle_api_error(request: Request, error: APIError) -> JSONResponse:
     request_id_value = getattr(request.state, "request_id", None)
+    message = str(error)
+    if request.url.path.startswith("/api/v1/userpage"):
+        if error.status_code == 401:
+            message = "Your session has expired. Please log in again."
+        elif error.status_code == 403:
+            message = "You do not have permission to perform this action."
+        elif error.status_code == 503:
+            message = (
+                "The user management service is temporarily unavailable. Please try again later."
+            )
     content = {
         "success": False,
-        "error": {"code": error.code, "message": str(error)},
+        "error": {"code": error.code, "message": message},
     }
     if request.url.path.startswith("/api/v1/admin/"):
         content["requestId"] = request_id_value
@@ -95,13 +106,99 @@ async def handle_validation_error(
 ) -> JSONResponse:
     logger.info("Request validation failed for %s", request.url.path)
     request_id_value = getattr(request.state, "request_id", None)
+    is_userpage = request.url.path.startswith("/api/v1/userpage")
+    message = "The request payload is invalid."
+    if is_userpage:
+        errors = error.errors()
+        if errors:
+            field = str(errors[0].get("loc", [""])[-1])
+            missing_messages = {
+                "display_name": "Display name is required.",
+                "email": "Email is required.",
+                "group_id": "Please select a user group.",
+                "password": "Password is required.",
+            }
+            message = missing_messages.get(field, str(errors[0].get("msg", message)))
     content = {
         "success": False,
-        "error": {"code": "validation", "message": "The request payload is invalid."},
+        "error": {"code": "validation", "message": message},
     }
-    if request.url.path.startswith("/api/v1/admin/"):
+    if request.url.path.startswith("/api/v1/admin/") or is_userpage:
         content["requestId"] = request_id_value
-    return JSONResponse(content, status_code=400)
+    return JSONResponse(content, status_code=422 if is_userpage else 400)
+
+
+@fastapi_app.exception_handler(IntegrityError)
+async def handle_integrity_error(request: Request, error: IntegrityError) -> JSONResponse:
+    logger.exception(
+        "Database constraint rejected request %s %s (request_id=%s)",
+        request.method,
+        request.url.path,
+        getattr(request.state, "request_id", "unknown"),
+    )
+    return JSONResponse(
+        {
+            "success": False,
+            "requestId": getattr(request.state, "request_id", None),
+            "error": {
+                "code": "conflict",
+                "message": "This change conflicts with existing data.",
+            },
+        },
+        status_code=409,
+    )
+
+
+@fastapi_app.exception_handler(SQLAlchemyError)
+async def handle_database_error(request: Request, error: SQLAlchemyError) -> JSONResponse:
+    logger.exception(
+        "Database operation failed for %s %s (request_id=%s)",
+        request.method,
+        request.url.path,
+        getattr(request.state, "request_id", "unknown"),
+    )
+    is_userpage = request.url.path.startswith("/api/v1/userpage")
+    return JSONResponse(
+        {
+            "success": False,
+            "requestId": getattr(request.state, "request_id", None),
+            "error": {
+                "code": "database_error",
+                "message": (
+                    "Something went wrong while processing your request. Please try again."
+                    if is_userpage
+                    else "The request could not be completed. Please try again."
+                ),
+            },
+        },
+        status_code=500,
+    )
+
+
+@fastapi_app.exception_handler(Exception)
+async def handle_unexpected_error(request: Request, error: Exception) -> JSONResponse:
+    logger.exception(
+        "Unhandled request failure for %s %s (request_id=%s)",
+        request.method,
+        request.url.path,
+        getattr(request.state, "request_id", "unknown"),
+    )
+    is_userpage = request.url.path.startswith("/api/v1/userpage")
+    return JSONResponse(
+        {
+            "success": False,
+            "requestId": getattr(request.state, "request_id", None),
+            "error": {
+                "code": "internal_error",
+                "message": (
+                    "Something went wrong while processing your request. Please try again."
+                    if is_userpage
+                    else "Something went wrong while processing your request. Please try again."
+                ),
+            },
+        },
+        status_code=500,
+    )
 
 
 fastapi_app.include_router(v1_router, prefix="/api/v1")

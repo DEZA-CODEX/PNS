@@ -158,17 +158,7 @@ export function AdminPanel({
     <div className="admin-times-font min-h-screen bg-[var(--color-surface-cool)] text-[var(--color-text-primary)]">
       <div className="flex min-h-screen flex-col md:flex-row">
         <aside className="w-full shrink-0 bg-[#051838] text-[var(--color-ivory)] md:w-[290px]">
-          <div className="flex items-center gap-3 border-b border-white/10 px-6 py-6">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--color-gold)] bg-[rgba(207,140,85,0.12)] text-lg font-semibold text-[var(--color-gold)]">
-              P
-            </div>
-            <div>
-              <div className="text-xs uppercase tracking-[0.18em] text-[var(--color-gold)]">
-                Hotel
-              </div>
-              <div className="text-xl font-semibold">PNS Nakshatra</div>
-            </div>
-          </div>
+          <div className="h-[89px] border-b border-white/10" aria-hidden="true" />
 
           <nav className="flex gap-1 overflow-x-auto px-3 py-3 md:block md:space-y-1 md:overflow-visible md:px-4 md:py-6">
             {navSections
@@ -196,7 +186,7 @@ export function AdminPanel({
                     }
                   }}
                   aria-current={activeSection === label ? "page" : undefined}
-                  className={`flex w-auto shrink-0 items-center justify-between whitespace-nowrap rounded-xl px-3 py-3 text-left text-sm uppercase tracking-[0.12em] transition-colors md:w-full ${
+                  className={`flex h-12 w-auto shrink-0 items-center justify-between whitespace-nowrap rounded-xl px-3 py-3 text-left text-sm uppercase tracking-[0.12em] transition-colors md:w-full ${
                     activeSection === label
                       ? "bg-white/8 text-[var(--color-ivory)]"
                       : "text-[var(--color-ivory)]/75 hover:bg-white/5 hover:text-[var(--color-ivory)]"

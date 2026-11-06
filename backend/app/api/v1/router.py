@@ -8,6 +8,7 @@ from app.api.v1.dining import router as dining_router
 from app.api.v1.images import router as images_router
 from app.api.v1.rooms import router as rooms_router
 from app.api.v1.API.homepage import router as homepage_router
+from app.api.v1.userpage import router as userpage_router
 
 router = APIRouter()
 router.include_router(admin_router, prefix="/admin", tags=["admin"])
@@ -18,3 +19,4 @@ router.include_router(dining_router, tags=["dining"])
 router.include_router(rooms_router, tags=["rooms"])
 router.include_router(homepage_router, tags=["images"])
 router.include_router(images_router, tags=["images"])
+router.include_router(userpage_router, tags=["userpage"])

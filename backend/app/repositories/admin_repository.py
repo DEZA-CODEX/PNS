@@ -360,6 +360,81 @@ async def list_users(db: AsyncSession, search: str | None) -> list[dict[str, Any
     ]
 
 
+async def list_userpage_users(
+    db: AsyncSession,
+    search: str | None,
+    group_id: str | None,
+    status: str | None,
+    access_level: str | None,
+    offset: int,
+    limit: int,
+) -> tuple[list[dict[str, Any]], int]:
+    filters = ["1 = 1"]
+    params: dict[str, Any] = {"offset": offset, "limit": limit}
+    if search:
+        filters.append("(u.email ILIKE :search OR u.display_name ILIKE :search)")
+        params["search"] = f"%{search}%"
+    if group_id:
+        filters.append(
+            "EXISTS (SELECT 1 FROM public.admin_user_groups ug_filter "
+            "WHERE ug_filter.user_id = u.id AND ug_filter.group_id = :group_id)"
+        )
+        params["group_id"] = _uuid_param(group_id)
+    if status:
+        filters.append("u.status::text = :status")
+        params["status"] = status
+    if access_level:
+        filters.append("r.name = :access_level")
+        params["access_level"] = access_level
+    where_clause = " AND ".join(filters)
+    count_result = await db.execute(
+        text(
+            f"""
+            SELECT count(*) AS total
+              FROM public.admin_users AS u
+              JOIN public.admin_roles AS r ON r.id = u.role_id
+             WHERE {where_clause}
+            """
+        ),
+        params,
+    )
+    total = int(_mapping(count_result)["total"])
+    result = await db.execute(
+        text(
+            f"""
+            SELECT u.id, u.email, u.display_name, u.status::text AS status,
+                   u.created_at, u.updated_at, u.last_login_at, r.name AS role_name,
+                   COALESCE(
+                     jsonb_agg(
+                       DISTINCT jsonb_build_object('id', g.id, 'name', g.name)
+                     ) FILTER (WHERE g.id IS NOT NULL),
+                     '[]'::jsonb
+                   ) AS groups
+              FROM public.admin_users AS u
+              JOIN public.admin_roles AS r ON r.id = u.role_id
+              LEFT JOIN public.admin_user_groups AS ug ON ug.user_id = u.id
+              LEFT JOIN public.admin_groups AS g ON g.id = ug.group_id
+             WHERE {where_clause}
+             GROUP BY u.id, u.email, u.display_name, u.status, u.created_at,
+                      u.updated_at, u.last_login_at, r.name
+             ORDER BY u.created_at DESC, u.id
+             OFFSET :offset LIMIT :limit
+            """
+        ),
+        params,
+    )
+    users = []
+    for row in result.mappings():
+        item = public_user(_user_row(dict(row)) or {})
+        item["groups"] = [
+            {"id": str(group["id"]), "name": group["name"]}
+            for group in (row["groups"] or [])
+        ]
+        item["accessLevel"] = row["role_name"] or "Administrator"
+        users.append(item)
+    return users, total
+
+
 async def create_admin_user(
     db: AsyncSession,
     email: str,
@@ -454,6 +529,13 @@ async def get_user_details(db: AsyncSession, user_id: str) -> dict[str, Any] | N
     }
 
 
+async def list_access_levels(db: AsyncSession) -> list[str]:
+    result = await db.execute(
+        text("SELECT name FROM public.admin_roles ORDER BY name")
+    )
+    return [row["name"] for row in result.mappings()]
+
+
 async def count_active_super_admin_users(db: AsyncSession) -> int:
     result = await db.execute(
         text(
@@ -543,50 +625,70 @@ async def create_group(db: AsyncSession, name: str, description: str) -> dict[st
 
 
 async def list_groups(db: AsyncSession) -> list[dict[str, Any]]:
-    groups_result = await db.execute(
+    result = await db.execute(
         text(
             """
-            SELECT id, name, description, is_active, is_protected, created_at, updated_at
-              FROM public.admin_groups ORDER BY name
+            SELECT g.id, g.name, g.description, g.is_active, g.is_protected,
+                   g.created_at, g.updated_at,
+                   count(DISTINCT ug.user_id) AS member_count,
+                   COALESCE(
+                     jsonb_agg(DISTINCT jsonb_build_object('user_id', ug.user_id))
+                       FILTER (WHERE ug.user_id IS NOT NULL), '[]'::jsonb
+                   ) AS members,
+                   COALESCE(
+                     jsonb_agg(DISTINCT jsonb_build_object(
+                       'effect', gp.effect::text,
+                       'permission', jsonb_build_object(
+                         'permission_key', p.permission_key,
+                         'label', p.label,
+                         'area', p.area
+                       )
+                     )) FILTER (WHERE p.id IS NOT NULL), '[]'::jsonb
+                   ) AS permissions
+              FROM public.admin_groups AS g
+              LEFT JOIN public.admin_user_groups AS ug ON ug.group_id = g.id
+              LEFT JOIN public.admin_group_permissions AS gp ON gp.group_id = g.id
+              LEFT JOIN public.admin_permissions AS p ON p.id = gp.permission_id
+             GROUP BY g.id
+             ORDER BY g.name
             """
         )
     )
-    groups = [dict(row) for row in groups_result.mappings()]
-    for group in groups:
-        members_result = await db.execute(
-            text(
-                """
-                SELECT user_id FROM public.admin_user_groups
-                 WHERE group_id = :group_id ORDER BY user_id
-                """
-            ),
-            {"group_id": group["id"]},
-        )
-        permissions_result = await db.execute(
-            text(
-                """
-                SELECT gp.effect::text AS effect, p.permission_key, p.label, p.area
-                  FROM public.admin_group_permissions AS gp
-                  JOIN public.admin_permissions AS p ON p.id = gp.permission_id
-                 WHERE gp.group_id = :group_id ORDER BY p.permission_key
-                """
-            ),
-            {"group_id": group["id"]},
-        )
+    groups = []
+    for row in result.mappings():
+        group = dict(row)
         group["id"] = str(group["id"])
-        group["members"] = [{"user_id": str(row["user_id"])} for row in members_result.mappings()]
-        group["permissions"] = [
-            {
-                "effect": row["effect"],
-                "permission": {
-                    "permission_key": row["permission_key"],
-                    "label": row["label"],
-                    "area": row["area"],
-                },
-            }
-            for row in permissions_result.mappings()
-        ]
+        groups.append(group)
     return groups
+
+
+async def list_permissions(db: AsyncSession) -> list[dict[str, str]]:
+    result = await db.execute(
+        text(
+            """
+            SELECT permission_key, label, area
+              FROM public.admin_permissions
+             ORDER BY area, permission_key
+            """
+        )
+    )
+    return [dict(row) for row in result.mappings()]
+
+
+async def get_assignable_groups(
+    db: AsyncSession, group_ids: list[str]
+) -> list[dict[str, Any]]:
+    result = await db.execute(
+        text(
+            """
+            SELECT id, name, is_active, is_protected
+              FROM public.admin_groups
+             WHERE id = ANY(CAST(:group_ids AS uuid[]))
+            """
+        ),
+        {"group_ids": [UUID(value) for value in group_ids]},
+    )
+    return [dict(row) for row in result.mappings()]
 
 
 async def get_group(db: AsyncSession, group_id: str) -> dict[str, Any] | None:
@@ -650,6 +752,76 @@ async def replace_group_members(
                 "group_id": _uuid_param(group_id),
                 "user_ids": [UUID(value) for value in user_ids],
             },
+        )
+
+
+async def replace_user_groups(
+    db: AsyncSession, user_id: str, group_ids: list[str]
+) -> None:
+    protected_result = await db.execute(
+        text(
+            """
+            SELECT g.id
+              FROM public.admin_user_groups AS ug
+              JOIN public.admin_groups AS g ON g.id = ug.group_id
+             WHERE ug.user_id = :user_id AND g.is_protected
+            """
+        ),
+        {"user_id": _uuid_param(user_id)},
+    )
+    preserved_ids = [row["id"] for row in protected_result.mappings()]
+    desired_ids = list(dict.fromkeys([UUID(value) for value in group_ids] + preserved_ids))
+    await db.execute(
+        text("DELETE FROM public.admin_user_groups WHERE user_id = :user_id"),
+        {"user_id": _uuid_param(user_id)},
+    )
+    if desired_ids:
+        await db.execute(
+            text(
+                """
+                INSERT INTO public.admin_user_groups (user_id, group_id)
+                SELECT :user_id, item.group_id
+                  FROM unnest(CAST(:group_ids AS uuid[])) AS item(group_id)
+                """
+            ),
+            {
+                "user_id": _uuid_param(user_id),
+                "group_ids": desired_ids,
+            },
+        )
+
+
+async def get_user_group_ids(db: AsyncSession, user_id: str) -> list[str]:
+    result = await db.execute(
+        text("SELECT group_id FROM public.admin_user_groups WHERE user_id = :user_id"),
+        {"user_id": _uuid_param(user_id)},
+    )
+    return [str(row["group_id"]) for row in result.mappings()]
+
+
+async def set_user_group_membership(
+    db: AsyncSession, user_id: str, group_id: str, assigned: bool
+) -> None:
+    if assigned:
+        await db.execute(
+            text(
+                """
+                INSERT INTO public.admin_user_groups (user_id, group_id)
+                VALUES (:user_id, :group_id)
+                ON CONFLICT (user_id, group_id) DO NOTHING
+                """
+            ),
+            {"user_id": _uuid_param(user_id), "group_id": _uuid_param(group_id)},
+        )
+    else:
+        await db.execute(
+            text(
+                """
+                DELETE FROM public.admin_user_groups
+                 WHERE user_id = :user_id AND group_id = :group_id
+                """
+            ),
+            {"user_id": _uuid_param(user_id), "group_id": _uuid_param(group_id)},
         )
 
 
