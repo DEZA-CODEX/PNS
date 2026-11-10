@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiResourceUrl } from "@/lib/api-client";
-import { getBundledImageRecords } from "@/services/roomImageRepository";
 
 export type ManagedImageRecord = {
   id: string;
@@ -107,21 +106,16 @@ export function ImageManagementControls({
       });
       const body = (await response.json()) as {
         images?: ManagedImageRecord[];
-        disabledBundledIds?: string[];
         error?: { message?: string };
       };
       if (!response.ok) throw new Error(body.error?.message ?? "Images could not be loaded.");
-      const disabled = new Set(body.disabledBundledIds ?? []);
-      const bundled = getBundledImageRecords(collection, category).filter(
-        (image) => !disabled.has(image.id),
-      );
-      setImages([...bundled, ...(body.images ?? [])]);
+      setImages(body.images ?? []);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "Images could not be loaded.");
     } finally {
       setLoading(false);
     }
-  }, [category, collection, endpoint, requestHeaders]);
+  }, [category, endpoint, requestHeaders]);
 
   useEffect(() => {
     void loadImages();

@@ -1,17 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
-import { heroImageSlides } from "@/lib/heroImageSlides";
 import heroTitleGraphic from "../../../../Untitled-1.webp";
 import { HeroBackdrop } from "@/components/HeroBackdrop";
+import { useHeroImages } from "@/hooks/useHeroImages";
 import type { BookingDetails } from "@/home/components/Booking/BookingWidget";
 import { BookingWidget } from "@/home/components/Booking/BookingWidget";
-import { heroContainerImageAssets } from "@/lib/asset-manifest";
-
-const cardSlides = heroImageSlides(heroContainerImageAssets, {
-  "hero-hotel1": "Hotel PNS Nakshatra guest room",
-  image: "Hotel PNS Nakshatra exterior",
-  "pns logo": "Hotel PNS Nakshatra logo",
-});
 
 export function Hero({
   ready = true,
@@ -20,6 +13,7 @@ export function Hero({
   ready?: boolean;
   onBook: (details?: BookingDetails) => void;
 }) {
+  const cardSlides = useHeroImages("hero_container");
   const root = useRef<HTMLElement>(null);
   const image = useRef<HTMLDivElement>(null);
   const [cardIndex, setCardIndex] = useState(0);

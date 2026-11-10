@@ -1,16 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { HeroBackdrop } from "@/components/HeroBackdrop";
-import { heroImageSlides } from "@/lib/heroImageSlides";
-import { heroContainerImageAssets } from "@/lib/asset-manifest";
-
-const cardSlides = heroImageSlides(heroContainerImageAssets, {
-  "hero-hotel1": "Hotel PNS Nakshatra guest room",
-  image: "Hotel PNS Nakshatra exterior",
-  "pns logo": "Hotel PNS Nakshatra logo",
-});
+import { useHeroImages } from "@/hooks/useHeroImages";
 
 export function Hero({ ready, onBook }: { ready: boolean; onBook: () => void }) {
+  const cardSlides = useHeroImages("hero_container");
   const root = useRef<HTMLElement>(null);
   const image = useRef<HTMLDivElement>(null);
   const [cardIndex, setCardIndex] = useState(0);

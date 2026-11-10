@@ -1181,10 +1181,15 @@ def test_storage_requires_backend_configuration(monkeypatch: pytest.MonkeyPatch)
     assert getattr(missing.value, "code", None) == "storage_not_configured"
 
 
-def test_storage_image_delete_reads_backup_and_disables_only_matching_record(
+def test_storage_image_delete_verifies_object_then_removes_database_record(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[str, object]] = []
+    db = type(
+        "FakeDatabase",
+        (),
+        {"flush": lambda self: asyncio.sleep(0)},
+    )()
     row = {
         "source_type": "upload",
         "has_database_content": False,
@@ -1193,34 +1198,41 @@ def test_storage_image_delete_reads_backup_and_disables_only_matching_record(
         "is_active": True,
     }
 
-    async def get_image(*_args: object) -> dict[str, object]:
-        return row
+    async def get_image(*_args: object) -> dict[str, object] | None:
+        calls.append(("lookup", "image-id"))
+        return row if calls.count(("lookup", "image-id")) == 1 else None
 
-    async def get_object(path: str) -> bytes:
+    async def get_object(path: str) -> bytes | None:
         calls.append(("read", path))
-        return b"stored image bytes"
+        return b"stored image bytes" if calls.count(("read", path)) == 1 else None
 
-    async def disable_image(*args: object) -> dict[str, object]:
-        calls.append(("disable", args))
-        return {"id": "image-id"}
+    async def delete_image(*args: object) -> bool:
+        calls.append(("delete_record", args))
+        return True
 
     async def delete_object(path: str) -> None:
         calls.append(("delete", path))
 
     monkeypatch.setattr(image_service, "get_managed_image", get_image)
     monkeypatch.setattr(image_service, "get_object", get_object)
-    monkeypatch.setattr(image_service, "disable_managed_image", disable_image)
+    monkeypatch.setattr(image_service, "delete_managed_image_record", delete_image)
     monkeypatch.setattr(image_service, "delete_object", delete_object)
     result = asyncio.run(
         image_service.delete_managed_image(
-            object(), "room", "vajra", "image-id"
+            db, "room", "vajra", "image-id"
         )
     )
 
-    assert calls[0] == ("read", "uploads/room/vajra/room.webp")
-    assert calls[1][0] == "disable"
-    assert calls[2] == ("delete", "uploads/room/vajra/room.webp")
+    assert calls == [
+        ("lookup", "image-id"),
+        ("read", "uploads/room/vajra/room.webp"),
+        ("delete", "uploads/room/vajra/room.webp"),
+        ("read", "uploads/room/vajra/room.webp"),
+        ("delete_record", (db, "image-id", "room", "vajra")),
+        ("lookup", "image-id"),
+    ]
     assert result == {
+        "record_id": "image-id",
         "storage_path": "uploads/room/vajra/room.webp",
         "backup": b"stored image bytes",
     }
@@ -1243,15 +1255,15 @@ def test_storage_delete_failure_is_not_reported_as_success(
     async def get_object(_path: str) -> bytes:
         return b"stored image bytes"
 
-    async def disable_image(*_args: object) -> dict[str, object]:
-        return {"id": "image-id"}
+    async def delete_image(*_args: object) -> bool:
+        raise AssertionError("Database mapping must remain when Storage deletion fails.")
 
     async def delete_object(_path: str) -> None:
         raise ImageManagementError("storage_error", "Storage deletion failed.", 502)
 
     monkeypatch.setattr(image_service, "get_managed_image", get_image)
     monkeypatch.setattr(image_service, "get_object", get_object)
-    monkeypatch.setattr(image_service, "disable_managed_image", disable_image)
+    monkeypatch.setattr(image_service, "delete_managed_image_record", delete_image)
     monkeypatch.setattr(image_service, "delete_object", delete_object)
     with pytest.raises(ImageManagementError) as failed:
         asyncio.run(
