@@ -344,6 +344,27 @@ async function mergeServerRoomImages(result: RoomImageLoadResult, endpoint = "/i
         selections: { ...DEFAULT_SELECTIONS },
       });
     }
+    const { records } = readPersistedSettings();
+    for (const image of result.images) {
+      const saved = records[image.id];
+      if (saved?.roomType === image.roomType) {
+        image.selections = { ...saved.selections };
+        image.displayOrder = saved.displayOrder;
+      }
+    }
+    for (const roomType of ROOM_TYPES) {
+      const roomImages = result.images.filter(
+        (image) => image.roomType === roomType && image.active,
+      );
+      for (const destination of ROOM_IMAGE_DESTINATIONS) {
+        if (roomImages.length && !roomImages.some((image) => image.selections[destination])) {
+          roomImages[0]!.selections[destination] = true;
+          result.warnings.push(
+            `Invalid saved selection recovered: at least one ${ROOM_TYPE_LABELS[roomType]} image is selected for ${destination === "roomsPage" ? "the Rooms page" : destination}.`,
+          );
+        }
+      }
+    }
     result.images.sort((left, right) => left.storageKey.localeCompare(right.storageKey));
   } catch {
     result.warnings.push(
@@ -354,17 +375,23 @@ async function mergeServerRoomImages(result: RoomImageLoadResult, endpoint = "/i
 }
 
 function serializeSettings(images: RoomImage[]): PersistedSettings {
+  const { records } = readPersistedSettings();
   return {
     version: SCHEMA_VERSION,
     images: Object.fromEntries(
-      images.map((image) => [
-        image.id,
-        {
-          roomType: image.roomType,
-          selections: image.selections,
-          displayOrder: image.displayOrder,
-        },
-      ]),
+      Object.entries({
+        ...records,
+        ...Object.fromEntries(
+          images.map((image) => [
+            image.id,
+            {
+              roomType: image.roomType,
+              selections: image.selections,
+              displayOrder: image.displayOrder,
+            },
+          ]),
+        ),
+      }),
     ),
   };
 }
@@ -389,7 +416,7 @@ export class LocalRoomImageRepository implements RoomImageRepository {
     destination: RoomImageDestination,
     selected: boolean,
   ): Promise<RoomImageLoadResult> {
-    const result = createLoadResult();
+    const result = await this.listImages("/images/rooms");
     const image = result.images.find((candidate) => candidate.id === imageId);
     if (!image) {
       throw new RoomImageRepositoryError(`Room image ${imageId} is not available.`);
@@ -690,6 +717,37 @@ async function mergeServerDiningImages(
         selections: { ...DEFAULT_DINING_SELECTIONS },
       });
     }
+    const { records, displayCounts } = readPersistedDiningSettings();
+    for (const image of result.images) {
+      const saved = records[image.id];
+      if (saved?.diningType === image.diningType) {
+        image.selections = { ...saved.selections };
+        image.displayOrder = saved.displayOrder;
+      }
+    }
+    for (const diningType of DINING_TYPES) {
+      const activeImages = result.images.filter(
+        (image) => image.diningType === diningType && image.active,
+      );
+      for (const destination of DINING_IMAGE_DESTINATIONS) {
+        if (activeImages.length && !activeImages.some((image) => image.selections[destination])) {
+          activeImages[0]!.selections[destination] = true;
+          result.warnings.push(
+            `Invalid saved selection recovered: at least one ${DINING_TYPE_LABELS[diningType]} image is selected for ${destination}.`,
+          );
+        }
+      }
+      for (const destination of ["diningPage", "diningHero"] as const) {
+        const selectedCount = activeImages.filter((image) => image.selections[destination]).length;
+        if (displayCounts[diningType][destination] > selectedCount && selectedCount > 0) {
+          displayCounts[diningType][destination] = Math.min(selectedCount, 3) as 1 | 2 | 3;
+          result.warnings.push(
+            `Dining ${destination === "diningPage" ? "page" : "hero"} image count for ${DINING_TYPE_LABELS[diningType]} was reduced to fit its selected images.`,
+          );
+        }
+      }
+    }
+    result.displayCounts = displayCounts;
     result.images.sort((left, right) => left.storageKey.localeCompare(right.storageKey));
   } catch {
     result.warnings.push(
@@ -700,17 +758,23 @@ async function mergeServerDiningImages(
 }
 
 function serializeDiningSettings(result: DiningImageLoadResult): PersistedDiningSettings {
+  const { records } = readPersistedDiningSettings();
   return {
     version: 1,
     images: Object.fromEntries(
-      result.images.map((image) => [
-        image.id,
-        {
-          diningType: image.diningType,
-          selections: image.selections,
-          displayOrder: image.displayOrder,
-        },
-      ]),
+      Object.entries({
+        ...records,
+        ...Object.fromEntries(
+          result.images.map((image) => [
+            image.id,
+            {
+              diningType: image.diningType,
+              selections: image.selections,
+              displayOrder: image.displayOrder,
+            },
+          ]),
+        ),
+      }),
     ),
     displayCounts: result.displayCounts,
   };
@@ -736,7 +800,7 @@ export class LocalDiningImageRepository implements DiningImageRepository {
   }
 
   async updateSelection(imageId: string, destination: DiningImageDestination, selected: boolean) {
-    const result = createDiningLoadResult();
+    const result = await this.listImages("/images/dining");
     const image = result.images.find((candidate) => candidate.id === imageId);
     if (!image) throw new RoomImageRepositoryError(`Dining image ${imageId} is not available.`);
     if (!image.active) {
@@ -775,7 +839,7 @@ export class LocalDiningImageRepository implements DiningImageRepository {
     if (count !== 1 && count !== 2 && count !== 3) {
       throw new DiningImageValidationError("Dining display count must be 1, 2, or 3 images.");
     }
-    const result = createDiningLoadResult();
+    const result = await this.listImages("/images/dining");
     const eligible = result.images.filter(
       (image) => image.diningType === diningType && image.active && image.selections[destination],
     ).length;
@@ -794,7 +858,7 @@ export class LocalDiningImageRepository implements DiningImageRepository {
     if (!Number.isInteger(displayOrder) || displayOrder < 0) {
       throw new DiningImageValidationError("Display order must be a non-negative whole number.");
     }
-    const result = createDiningLoadResult();
+    const result = await this.listImages("/images/dining");
     const image = result.images.find((candidate) => candidate.id === imageId);
     if (!image) throw new RoomImageRepositoryError(`Dining image ${imageId} is not available.`);
     if (!image.active) {
