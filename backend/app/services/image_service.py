@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import logging
 import re
 import uuid
 from pathlib import Path
@@ -17,6 +18,12 @@ except ImportError:
 
 from app.core.config import get_settings
 from app.core.exceptions import ImageManagementError
+from app.services.image_storage import (
+    delete_object,
+    get_object,
+    managed_object_path,
+    upload_object,
+)
 from app.repositories.image_repository import (
     disable_bundled_image,
     disable_managed_image,
@@ -33,6 +40,7 @@ from app.repositories.image_repository import (
 ROOM_CATEGORIES = {"vajra", "garuda", "arohana", "madhurya", "maayukha"}
 DINING_CATEGORIES = {"vrindavan", "cloud9", "clinq"}
 SUPPORTED_FORMATS = {"JPEG", "PNG", "WEBP", "GIF", "TIFF", "BMP", "AVIF"}
+logger = logging.getLogger("pns.image_service")
 
 
 def validate_collection_category(collection: str, category: str) -> None:
@@ -51,6 +59,8 @@ def _normalized_filename(value: str) -> str:
 
 def _process_image(data: bytes, filename: str) -> tuple[bytes, str, bool]:
     settings = get_settings()
+    if not data:
+        raise ImageManagementError("empty_file", "Choose a non-empty image file.", 400)
     if len(data) > settings.max_upload_bytes:
         raise ImageManagementError("file_too_large", "Images must be 8 MB or smaller.", 400)
     try:
@@ -82,8 +92,27 @@ def _process_image(data: bytes, filename: str) -> tuple[bytes, str, bool]:
                 if processed.mode not in {"RGB", "RGBA"}:
                     processed = processed.convert("RGBA" if "A" in processed.getbands() else "RGB")
                 processed.save(output, format="WEBP", quality=82, method=6)
-                return output.getvalue(), f"{uuid.uuid4()}-{_normalized_filename(filename)}.webp", True
-            return data, f"{uuid.uuid4()}-{_normalized_filename(filename)}.webp", False
+                processed_data = output.getvalue()
+            else:
+                processed_data = data
+            with Image.open(io.BytesIO(processed_data)) as generated:
+                if generated.format != "WEBP" or generated.width * generated.height > settings.max_image_pixels:
+                    raise ImageManagementError(
+                        "invalid_converted_image", "The converted WebP image is invalid.", 422
+                    )
+                generated.verify()
+            logger.info(
+                "Processed image upload (input_format=%s, input_bytes=%d, output_bytes=%d, converted=%s).",
+                image_format,
+                len(data),
+                len(processed_data),
+                converted,
+            )
+            return (
+                processed_data,
+                f"{uuid.uuid4()}-{_normalized_filename(filename)}.webp",
+                converted,
+            )
     except ImageManagementError:
         raise
     except (UnidentifiedImageError, OSError, ValueError) as error:
@@ -121,8 +150,18 @@ async def add_external_image(
     created_by: str,
 ) -> dict:
     validate_collection_category(collection, category)
-    parsed = urlsplit(image_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+    try:
+        parsed = urlsplit(image_url)
+        _ = parsed.port
+    except ValueError as error:
+        raise ImageManagementError("invalid_url", "Enter a valid HTTP or HTTPS image URL.", 400) from error
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or any(character.isspace() for character in image_url)
+    ):
         raise ImageManagementError("invalid_url", "Enter a valid HTTP or HTTPS image URL.", 400)
     return await save_managed_image(
         db,
@@ -147,23 +186,60 @@ async def add_uploaded_image(
     processed_data, stored_name, converted = await asyncio.to_thread(
         _process_image, data, filename
     )
-    row = await save_managed_image(
-        db,
-        collection=collection,
-        category=category,
-        url="",
-        storage_path=f"uploads/{collection}/{category}/{stored_name}",
-        source_type="upload",
-        created_by=created_by,
-        image_data=processed_data,
-        content_type="image/webp",
+    storage_path = managed_object_path(
+        collection, category, f"uploads/{collection}/{category}/{stored_name}"
+    )
+    logger.info(
+        "Starting managed image upload (collection=%s, category=%s, path=%s).",
+        collection,
+        category,
+        storage_path,
+    )
+    public_url = await upload_object(storage_path, processed_data)
+    try:
+        row = await save_managed_image(
+            db,
+            collection=collection,
+            category=category,
+            url=public_url,
+            storage_path=storage_path,
+            source_type="upload",
+            created_by=created_by,
+            image_data=None,
+            content_type="image/webp",
+        )
+    except Exception:
+        try:
+            await delete_object(storage_path)
+        except ImageManagementError:
+            logger.exception("Could not clean up an image object after metadata persistence failed.")
+        raise
+    logger.info(
+        "Saved managed image metadata (collection=%s, category=%s, image_id=%s).",
+        collection,
+        category,
+        row.get("id", "unknown"),
     )
     row["_converted"] = converted
     return row
 
 
 async def image_content(db: AsyncSession, image_id: str) -> dict | None:
-    return await get_managed_image_content(db, image_id)
+    image = await get_managed_image_content(db, image_id)
+    if image is None or image.get("image_data") is not None:
+        return image
+    if image.get("source_type") != "upload" or image.get("content_type") != "image/webp":
+        return None
+    if not image.get("storage_path") or not image.get("category_type") or not image.get("category_id"):
+        return None
+    path = managed_object_path(
+        str(image["category_type"]), str(image["category_id"]), str(image["storage_path"])
+    )
+    data = await get_object(path)
+    if data is None:
+        return None
+    image["image_data"] = data
+    return image
 
 
 async def delete_managed_image(
@@ -171,19 +247,58 @@ async def delete_managed_image(
     collection: str,
     category: str,
     image_id: str,
-) -> None:
+) -> dict | None:
     validate_collection_category(collection, category)
     row = await get_managed_image(db, collection, category, image_id)
     if row is not None:
+        is_storage_image = (
+            row.get("source_type") == "upload"
+            and not row.get("has_database_content")
+            and row.get("content_type") == "image/webp"
+            and row.get("storage_path")
+        )
+        if is_storage_image:
+            if not row.get("is_active", True):
+                raise ImageManagementError(
+                    "not_found", "The image was not found in this category.", 404
+                )
+            storage_path = managed_object_path(
+                collection, category, str(row["storage_path"])
+            )
+            backup = await get_object(storage_path)
+            if backup is None:
+                raise ImageManagementError(
+                    "storage_object_missing",
+                    "The uploaded image record points to a missing Supabase Storage object.",
+                    502,
+                )
+            updated = await disable_managed_image(db, image_id, collection, category)
+            if updated is None:
+                raise ImageManagementError(
+                    "not_found", "The image was not found in this category.", 404
+                )
+            await delete_object(storage_path)
+            logger.info(
+                "Disabled managed image and removed Storage object (collection=%s, category=%s, image_id=%s).",
+                collection,
+                category,
+                image_id,
+            )
+            return {"storage_path": storage_path, "backup": backup}
+        if not row.get("is_active", True):
+            raise ImageManagementError(
+                "not_found", "The image was not found in this category.", 404
+            )
         updated = await disable_managed_image(db, image_id, collection, category)
         if updated is None:
             raise ImageManagementError(
                 "not_found", "The image was not found in this category.", 404
             )
-        return
+        return None
     if not image_id.startswith(f"{category}:"):
         raise ImageManagementError("not_found", "The image was not found in this category.", 404)
     await disable_bundled_image(db, image_id, collection, category)
+    return None
 
 
 async def patch_image(

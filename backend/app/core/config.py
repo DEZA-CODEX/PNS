@@ -33,6 +33,17 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("DATABASE_URL", "SUPABASE_DB_URL"),
     )
+    supabase_url: str | None = Field(default=None, validation_alias="SUPABASE_URL")
+    supabase_secret_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY"),
+    )
+    supabase_storage_bucket: str | None = Field(
+        default=None, validation_alias="SUPABASE_STORAGE_BUCKET"
+    )
+    supabase_storage_public: bool = Field(
+        default=False, validation_alias="SUPABASE_STORAGE_PUBLIC"
+    )
     database_pool_size: int = Field(
         default=1,
         validation_alias="PNS_DATABASE_POOL_SIZE",

@@ -55,6 +55,7 @@ from app.services.image_service import (
     list_images,
     patch_image,
 )
+from app.services.image_storage import delete_object, restore_object
 
 logger = logging.getLogger("pns.api.admin")
 router = APIRouter()
@@ -715,17 +716,27 @@ async def _upload_files(
             db, collection, category, file.filename or "image", data, actor.user["id"]
         )
         image.pop("_converted", None)
-        await write_audit_event(
-            db,
-            actor.user["id"],
-            f"{collection}_images.upload",
-            collection,
-            category,
-            "success",
-            _request_id(request),
-            {"sourceType": "upload"},
-        )
-        await db.commit()
+        try:
+            await write_audit_event(
+                db,
+                actor.user["id"],
+                f"{collection}_images.upload",
+                collection,
+                category,
+                "success",
+                _request_id(request),
+                {"sourceType": "upload"},
+            )
+            await db.commit()
+        except Exception:
+            if image.get("path"):
+                try:
+                    await delete_object(str(image["path"]))
+                except APIError:
+                    logger.exception(
+                        "Could not clean up an image object after upload transaction failure."
+                    )
+            raise
         return JSONResponse(
             {
                 "success": True,
@@ -737,6 +748,7 @@ async def _upload_files(
         )
 
     results: list[dict[str, Any]] = []
+    failure_statuses: list[int] = []
     for file in files:
         try:
             data = await file.read(get_settings().max_upload_bytes + 1)
@@ -756,6 +768,7 @@ async def _upload_files(
                 }
             )
         except APIError as error:
+            failure_statuses.append(error.status_code)
             results.append(
                 {
                     "originalName": file.filename or "unknown",
@@ -770,18 +783,35 @@ async def _upload_files(
             )
     processed = sum(1 for item in results if item["success"])
     failed = len(results) - processed
-    await write_audit_event(
-        db,
-        actor.user["id"],
-        f"{collection}_images.upload",
-        collection,
-        category,
-        "success" if failed == 0 else "partial",
-        _request_id(request),
-        {"files": len(results), "success": processed, "failed": failed},
+    try:
+        await write_audit_event(
+            db,
+            actor.user["id"],
+            f"{collection}_images.upload",
+            collection,
+            category,
+            "success" if failed == 0 else "partial",
+            _request_id(request),
+            {"files": len(results), "success": processed, "failed": failed},
+        )
+        await db.commit()
+    except Exception:
+        for result in results:
+            if result["success"] and result["path"]:
+                try:
+                    await delete_object(str(result["path"]))
+                except APIError:
+                    logger.exception(
+                        "Could not clean up a batch image object after upload transaction failure."
+                    )
+        raise
+    status = (
+        201
+        if failed == 0
+        else 207
+        if processed > 0
+        else max(failure_statuses, default=400)
     )
-    await db.commit()
-    status = 201 if failed == 0 else 207 if processed > 0 else 400
     return JSONResponse(
         {
             "success": failed == 0,
@@ -910,7 +940,7 @@ def _image_router(collection: str) -> None:
     ) -> Response:
         if not category:
             raise ImageManagementError("invalid_category", "The image category is invalid.", 400)
-        await delete_managed_image(db, collection, category, image_id)
+        storage_cleanup = await delete_managed_image(db, collection, category, image_id)
         await write_audit_event(
             db,
             context.user["id"],
@@ -920,7 +950,20 @@ def _image_router(collection: str) -> None:
             "success",
             _request_id(request),
         )
-        await db.commit()
+        try:
+            await db.commit()
+        except Exception:
+            if storage_cleanup and storage_cleanup.get("backup") is not None:
+                try:
+                    await restore_object(
+                        str(storage_cleanup["storage_path"]),
+                        storage_cleanup["backup"],
+                    )
+                except APIError:
+                    logger.exception(
+                        "Could not restore a Storage object after image deletion could not be committed."
+                    )
+            raise
         return JSONResponse(
             {
                 "success": True,

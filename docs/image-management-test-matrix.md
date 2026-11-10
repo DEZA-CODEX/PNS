@@ -2,6 +2,11 @@
 
 Historical test environment: Next.js development server on `http://localhost:3100` with isolated temporary test data.
 
+The historical UI/local-storage results below predate the Supabase Storage migration. The current
+backend test suite includes mocked Storage upload, byte verification, public URL retrieval,
+category-path validation, and deletion-failure coverage. No live bucket was available in the
+workspace, so these results do not claim a real Supabase upload or deployed Vercel verification.
+
 | ID(s)                                 | Module             | Scenario                                                     | Preconditions / data                                 | Expected result                                      | Actual result                                                                  | Status           |
 | ------------------------------------- | ------------------ | ------------------------------------------------------------ | ---------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------- |
 | SEC-001, SEC-013                      | Security           | Admin list/mutation without token                            | No Authorization header                              | `401`, sanitized error                               | `401 unauthorized`                                                             | PASS             |

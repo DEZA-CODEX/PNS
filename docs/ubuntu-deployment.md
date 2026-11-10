@@ -52,11 +52,13 @@ NEXT_PUBLIC_API_BASE_URL=https://your-domain.example/api/v1
 
 In `backend/.env`, set `APP_ENV=production`, `FRONTEND_URL=https://your-domain.example`,
 `CORS_ORIGINS=https://your-domain.example`, `DATABASE_URL` to the existing Supabase PostgreSQL
-connection string, `PNS_IMAGE_STORAGE_DIR=/opt/pns/public/uploads`, and
+connection string, the existing Supabase Storage bucket settings, and
 `PNS_ALLOWED_HOSTS=localhost,127.0.0.1,your-domain.example`. Set
 `PNS_SECURE_COOKIES=true` when serving HTTPS. Keep all database credentials in the backend
-environment file only. `PNS_IMAGE_STORAGE_DIR` is only used by the one-time legacy image migration;
-new uploads are stored in PostgreSQL. Redis is optional for a single backend instance; set
+environment file only. Configure `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and
+`SUPABASE_STORAGE_BUCKET`; set `SUPABASE_STORAGE_PUBLIC=true` only when that existing bucket is
+public. `PNS_IMAGE_STORAGE_DIR` is only used by the one-time legacy image migration; new uploads
+are stored in Supabase Storage. Redis is optional for a single backend instance; set
 `REDIS_URL` only when a shared Redis service is available. Do not configure or create a local
 database.
 
