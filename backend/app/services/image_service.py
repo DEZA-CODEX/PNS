@@ -22,6 +22,7 @@ from app.services.image_storage import (
     delete_object,
     get_object,
     managed_object_path,
+    resolve_object_url,
     upload_object,
 )
 from app.repositories.image_repository import (
@@ -125,21 +126,48 @@ async def list_images(
     db: AsyncSession, collection: str, category: str, display_location: str | None = None
 ) -> tuple[list[dict], list[str]]:
     validate_collection_category(collection, category)
-    return await list_managed_images(db, collection, category, display_location)
+    images, hidden_ids = await list_managed_images(db, collection, category, display_location)
+    await _resolve_storage_image_urls(images, collection, category)
+    return images, hidden_ids
+
+
+async def _resolve_storage_image_urls(
+    images: list[dict], collection: str, category: str
+) -> None:
+    for image in images:
+        if (
+            image.get("sourceType") != "upload"
+            or not image.get("path")
+            or image.get("url")
+        ):
+            continue
+        path = managed_object_path(collection, category, str(image["path"]))
+        image["url"] = await resolve_object_url(path)
 
 
 async def list_homepage_images(db: AsyncSession) -> dict:
-    return await list_homepage_managed_images(db)
+    result = await list_homepage_managed_images(db)
+    for collection, categories in result["images"].items():
+        for category, images in categories.items():
+            await _resolve_storage_image_urls(images, collection, category)
+    return result
 
 
 async def list_about_images(db: AsyncSession) -> dict:
-    return await list_about_managed_images(db)
+    result = await list_about_managed_images(db)
+    for collection, categories in result["images"].items():
+        for category, images in categories.items():
+            await _resolve_storage_image_urls(images, collection, category)
+    return result
 
 
 async def list_section_images(
     db: AsyncSession, collection: str, categories: tuple[str, ...]
 ) -> dict:
-    return await list_collection_managed_images(db, collection, categories)
+    result = await list_collection_managed_images(db, collection, categories)
+    for category, images in result["images"].items():
+        await _resolve_storage_image_urls(images, collection, category)
+    return result
 
 
 async def add_external_image(
@@ -195,7 +223,8 @@ async def add_uploaded_image(
         category,
         storage_path,
     )
-    public_url = await upload_object(storage_path, processed_data)
+    resolved_url = await upload_object(storage_path, processed_data)
+    public_url = resolved_url if get_settings().supabase_storage_public else ""
     try:
         row = await save_managed_image(
             db,
@@ -220,6 +249,7 @@ async def add_uploaded_image(
         category,
         row.get("id", "unknown"),
     )
+    row["url"] = resolved_url
     row["_converted"] = converted
     return row
 
@@ -228,7 +258,7 @@ async def image_content(db: AsyncSession, image_id: str) -> dict | None:
     image = await get_managed_image_content(db, image_id)
     if image is None or image.get("image_data") is not None:
         return image
-    if image.get("source_type") != "upload" or image.get("content_type") != "image/webp":
+    if image.get("source_type") != "upload":
         return None
     if not image.get("storage_path") or not image.get("category_type") or not image.get("category_id"):
         return None
@@ -239,6 +269,7 @@ async def image_content(db: AsyncSession, image_id: str) -> dict | None:
     if data is None:
         return None
     image["image_data"] = data
+    image["content_type"] = image.get("content_type") or "image/webp"
     return image
 
 

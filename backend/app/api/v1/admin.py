@@ -941,16 +941,16 @@ def _image_router(collection: str) -> None:
         if not category:
             raise ImageManagementError("invalid_category", "The image category is invalid.", 400)
         storage_cleanup = await delete_managed_image(db, collection, category, image_id)
-        await write_audit_event(
-            db,
-            context.user["id"],
-            f"{collection}_images.delete",
-            collection,
-            image_id,
-            "success",
-            _request_id(request),
-        )
         try:
+            await write_audit_event(
+                db,
+                context.user["id"],
+                f"{collection}_images.delete",
+                collection,
+                image_id,
+                "success",
+                _request_id(request),
+            )
             await db.commit()
         except Exception:
             if storage_cleanup and storage_cleanup.get("backup") is not None:
