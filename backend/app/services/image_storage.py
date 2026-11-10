@@ -148,6 +148,48 @@ async def get_object(path: str) -> bytes | None:
     return response.content
 
 
+async def signed_object_url(path: str, expires_in: int = 3600) -> str:
+    config = _storage_settings()
+    response = await _request(
+        "POST",
+        f"{config.base_url}/storage/v1/object/sign/{quote(config.bucket, safe='')}/{quote(path, safe='/')}",
+        headers=_headers(config, content_type="application/json"),
+        json={"expiresIn": expires_in},
+    )
+    if response.status_code not in {200, 201}:
+        raise _storage_failure(response, "signed URL generation")
+    try:
+        payload = response.json()
+    except ValueError as error:
+        raise ImageManagementError(
+            "storage_error", "Supabase Storage returned an invalid signed URL response.", 502
+        ) from error
+    signed_url = payload.get("signedURL") or payload.get("signedUrl")
+    if not isinstance(signed_url, str) or not signed_url:
+        raise ImageManagementError(
+            "storage_error", "Supabase Storage did not return a signed URL.", 502
+        )
+    if signed_url.startswith("http://") or signed_url.startswith("https://"):
+        parsed = urlsplit(signed_url)
+        if parsed.scheme != urlsplit(config.base_url).scheme or parsed.netloc != urlsplit(config.base_url).netloc:
+            raise ImageManagementError(
+                "storage_error", "Supabase Storage returned a signed URL for an unexpected host.", 502
+            )
+        return signed_url
+    if signed_url.startswith("/storage/v1/"):
+        return f"{config.base_url}{signed_url}"
+    if signed_url.startswith("/"):
+        return f"{config.base_url}/storage/v1{signed_url}"
+    raise ImageManagementError(
+        "storage_error", "Supabase Storage returned an invalid signed URL.", 502
+    )
+
+
+async def resolve_object_url(path: str) -> str:
+    config = _storage_settings()
+    return public_object_url(path) if config.is_public else await signed_object_url(path)
+
+
 async def upload_object(path: str, data: bytes, *, upsert: bool = False) -> str:
     config = _storage_settings()
     endpoint = _object_endpoint(config, path)
@@ -175,31 +217,35 @@ async def upload_object(path: str, data: bytes, *, upsert: bool = False) -> str:
             502,
         )
 
+    url = await resolve_object_url(path)
+    public_response = await _request("GET", url, headers={})
+    if (
+        public_response.status_code != 200
+        or not public_response.headers.get("content-type", "").lower().startswith("image/")
+        or public_response.content != data
+    ):
+        try:
+            await delete_object(path)
+        except ImageManagementError:
+            logger.exception("Could not clean up an inaccessible Storage upload.")
+        raise ImageManagementError(
+            "storage_verification_failed",
+            "The uploaded image URL did not return the stored image bytes with an image content type.",
+            502,
+        )
     if config.is_public:
-        url = public_object_url(path)
-        public_response = await _request("GET", url, headers={})
-        if public_response.status_code != 200 or public_response.content != data:
-            try:
-                await delete_object(path)
-            except ImageManagementError:
-                logger.exception("Could not clean up an inaccessible public Storage upload.")
-            raise ImageManagementError(
-                "storage_verification_failed",
-                "The uploaded image is not retrievable from its configured public URL. Verify the bucket's public access setting.",
-                502,
-            )
         logger.info(
             "Verified public Supabase Storage image object (bucket=%s, path=%s).",
             config.bucket,
             path,
         )
-        return url
-    logger.info(
-        "Verified private Supabase Storage image object (bucket=%s, path=%s).",
-        config.bucket,
-        path,
-    )
-    return ""
+    else:
+        logger.info(
+            "Verified signed Supabase Storage image object (bucket=%s, path=%s).",
+            config.bucket,
+            path,
+        )
+    return url
 
 
 async def delete_object(path: str) -> None:

@@ -39,12 +39,29 @@ function safeImageSource(value: string) {
   }
 }
 
+function safeImageDetails(value: string) {
+  const source = safeImageSource(value);
+  if (!source || typeof window === "undefined") return null;
+  try {
+    const parsed = new URL(source, window.location.origin);
+    return { host: parsed.host, path: parsed.pathname };
+  } catch {
+    return null;
+  }
+}
+
+function safeImageLabel(value: string) {
+  const details = safeImageDetails(value);
+  return details ? `${details.host}${details.path}` : "Invalid image URL";
+}
+
 export function ImageManagementControls({
   collection,
   category,
   categoryLabel,
 }: ImageManagementControlsProps) {
   const [images, setImages] = useState<ManagedImageRecord[]>([]);
+  const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -351,61 +368,83 @@ export function ImageManagementControls({
       ) : null}
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {images.map((image) => (
-          <article
-            key={image.id}
-            className="overflow-hidden rounded-xl border border-[var(--color-border-warm)] bg-white"
-          >
-            <img
-              src={safeImageSource(image.url)}
-              alt={`${categoryLabel} managed image`}
-              className="aspect-[4/3] w-full object-cover"
-            />
-            <div className="grid gap-2 p-3 text-xs text-[#46536b]">
-              <p className="font-medium text-[#051838]">
-                {image.sourceType === "external"
-                  ? "External URL"
-                  : image.sourceType === "bundled"
-                    ? "Bundled website asset"
-                    : "Uploaded image"}
-              </p>
-              <p className="break-all">
-                <strong>Image URL:</strong> {image.url}
-              </p>
-              <p className="break-all">
-                <strong>
-                  {image.sourceType === "upload" ? "Database filename:" : "Image path:"}
-                </strong>{" "}
-                {image.sourceType === "upload"
-                  ? (image.filename ?? "Stored in PostgreSQL")
-                  : (image.path ?? "External URL")}
-              </p>
-              <label className="grid gap-1 text-xs">
-                Display location
-                <select
-                  value={image.displayLocation ?? "gallery"}
-                  disabled={saving || image.sourceType === "bundled"}
-                  onChange={(event) => void updatePlacement(image, event.target.value)}
-                  className="rounded-lg border border-[var(--color-border-warm)] bg-white px-2 py-2 text-[#051838]"
+        {images.map((image) => {
+          const imageSource = safeImageSource(image.url);
+          const imageFailed = failedImages.has(image.id) || !imageSource;
+          return (
+            <article
+              key={image.id}
+              className="overflow-hidden rounded-xl border border-[var(--color-border-warm)] bg-white"
+            >
+              {imageFailed ? (
+                <div
+                  className="flex aspect-[4/3] items-center justify-center bg-[#f3f4f6] px-4 text-center text-sm text-[#46536b]"
+                  role="img"
+                  aria-label={`${categoryLabel} image unavailable`}
                 >
-                  <option value="homepage">Homepage</option>
-                  <option value="room_listing">Room listing</option>
-                  <option value="room_detail">Room detail</option>
-                  <option value="dining_section">Dining section</option>
-                  <option value="gallery">Gallery</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                onClick={() => void deleteImage(image)}
-                disabled={saving}
-                className="mt-1 w-fit rounded-lg border border-red-300 px-3 py-2 text-xs font-medium text-red-800 disabled:opacity-50"
-              >
-                Delete image
-              </button>
-            </div>
-          </article>
-        ))}
+                  Image could not be loaded
+                </div>
+              ) : (
+                <img
+                  src={imageSource}
+                  alt={`${categoryLabel} managed image`}
+                  className="aspect-[4/3] w-full object-cover"
+                  onError={() => {
+                    console.warn("Managed image failed to load.", {
+                      imageId: image.id,
+                      sourceType: image.sourceType,
+                      ...safeImageDetails(image.url),
+                    });
+                    setFailedImages((current) => new Set(current).add(image.id));
+                  }}
+                />
+              )}
+              <div className="grid gap-2 p-3 text-xs text-[#46536b]">
+                <p className="font-medium text-[#051838]">
+                  {image.sourceType === "external"
+                    ? "External URL"
+                    : image.sourceType === "bundled"
+                      ? "Bundled website asset"
+                      : "Uploaded image"}
+                </p>
+                <p className="break-all">
+                  <strong>Image URL:</strong> {safeImageLabel(image.url)}
+                </p>
+                <p className="break-all">
+                  <strong>
+                    {image.sourceType === "upload" ? "Database filename:" : "Image path:"}
+                  </strong>{" "}
+                  {image.sourceType === "upload"
+                    ? (image.filename ?? "Stored in PostgreSQL")
+                    : (image.path ?? "External URL")}
+                </p>
+                <label className="grid gap-1 text-xs">
+                  Display location
+                  <select
+                    value={image.displayLocation ?? "gallery"}
+                    disabled={saving || image.sourceType === "bundled"}
+                    onChange={(event) => void updatePlacement(image, event.target.value)}
+                    className="rounded-lg border border-[var(--color-border-warm)] bg-white px-2 py-2 text-[#051838]"
+                  >
+                    <option value="homepage">Homepage</option>
+                    <option value="room_listing">Room listing</option>
+                    <option value="room_detail">Room detail</option>
+                    <option value="dining_section">Dining section</option>
+                    <option value="gallery">Gallery</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void deleteImage(image)}
+                  disabled={saving}
+                  className="mt-1 w-fit rounded-lg border border-red-300 px-3 py-2 text-xs font-medium text-red-800 disabled:opacity-50"
+                >
+                  Delete image
+                </button>
+              </div>
+            </article>
+          );
+        })}
       </div>
     </section>
   );

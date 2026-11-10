@@ -96,6 +96,12 @@ existing `uploads/room/<category>/...` and `uploads/dining/<category>/...` paths
 actual access setting before setting `SUPABASE_STORAGE_PUBLIC=true`; no bucket is declared by
 this repository.
 
+The configured Supabase project was inspected and contains an existing public `pns-images` bucket.
+The local `backend/.env` uses `SUPABASE_STORAGE_BUCKET=pns-images` and
+`SUPABASE_STORAGE_PUBLIC=true`; configure the same values in the backend Vercel project if it uses
+this project and bucket. The frontend CSP permits HTTP(S) image sources because admins may enter
+external image URLs; browser mixed-content rules still apply to HTTP images on HTTPS pages.
+
 Because `NEXT_PUBLIC_API_BASE_URL` is a public build-time variable, rebuild/redeploy Next.js after
 changing it. The frontend and backend Vercel projects deploy independently. After changing
 backend environment variables, redeploy the backend. Changing domains requires updating the

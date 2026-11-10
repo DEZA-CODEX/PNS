@@ -23,13 +23,15 @@ def _image(row: dict[str, Any]) -> dict[str, Any]:
     storage_path = str(row["storage_path"]) if row.get("storage_path") else None
     is_storage_image = (
         row.get("source_type") == "upload"
-        and row.get("content_type") == "image/webp"
+        and not is_database_image
         and storage_path is not None
     )
     url = str(row.get("public_url") or "")
-    if is_database_image or (is_storage_image and not url):
+    if is_database_image:
         url = f"/api/v1/images/content/{row['id']}"
-    if url:
+    elif is_storage_image:
+        url = ""
+    elif row.get("source_type") != "external" and url:
         separator = "&" if "?" in url else "?"
         url = f"{url}{separator}v={''.join(c for c in cache_version if c.isalnum() or c in '_-')}"
     return {
@@ -316,7 +318,7 @@ async def get_managed_image_content(db: AsyncSession, image_id: str) -> dict[str
                                      category_type, category_id
               FROM public.managed_images
              WHERE id = :image_id AND source_type = 'upload'
-               AND is_active AND (image_data IS NOT NULL OR content_type = 'image/webp')
+               AND is_active AND (image_data IS NOT NULL OR storage_path IS NOT NULL)
              LIMIT 1
             """
         ),
