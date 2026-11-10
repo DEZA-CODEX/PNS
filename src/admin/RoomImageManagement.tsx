@@ -50,7 +50,7 @@ export function RoomImageManagement() {
     setFeedback(null);
     try {
       await roomImageRepository.updateSelection(imageId, destination, selected);
-      setFeedback("Selection saved in this browser.");
+      setFeedback("Selection saved to the image record.");
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "The selection could not be saved.");
     } finally {
@@ -73,8 +73,7 @@ export function RoomImageManagement() {
               Room Image Management
             </h2>
             <p className="mt-2 max-w-3xl text-sm text-[var(--color-text-primary)]/70">
-              Selections are saved in this browser only. They are not shared with other devices or
-              site visitors.
+              Selections are saved with each image and control where it appears on the website.
             </p>
           </div>
           <span className="rounded-full border border-[var(--color-border-warm)] px-3 py-1 text-xs text-[var(--color-text-primary)]/70">

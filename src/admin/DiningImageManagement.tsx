@@ -75,7 +75,7 @@ export function DiningImageManagement() {
   ) =>
     save(
       () => diningImageRepository.updateSelection(imageId, destination, selected),
-      "Selection saved in this browser.",
+      "Selection saved to the image record.",
     );
 
   return (
@@ -93,8 +93,7 @@ export function DiningImageManagement() {
               Dining Image Management
             </h2>
             <p className="mt-2 max-w-3xl text-sm text-[var(--color-text-primary)]/70">
-              Selections and display counts are saved in this browser only; they do not sync to
-              other devices or visitors.
+              Selections are saved with each image; display counts remain specific to this browser.
             </p>
           </div>
           <span className="rounded-full border border-[var(--color-border-warm)] px-3 py-1 text-xs text-[var(--color-text-primary)]/70">

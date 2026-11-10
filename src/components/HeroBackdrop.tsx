@@ -1,19 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
-import { heroImageSlides } from "@/lib/heroImageSlides";
-import { heroBackgroundImageAssets } from "@/lib/asset-manifest";
-
-const slides = heroImageSlides(heroBackgroundImageAssets, {
-  "hero-hotel": "Hotel PNS Nakshatra illuminated at night",
-  image: "Hotel PNS Nakshatra exterior",
-  "room-deluxe1": "Deluxe room at Hotel PNS Nakshatra",
-});
+import { useHeroImages } from "@/hooks/useHeroImages";
 
 /**
  * Cinematic hotel backdrop: slow ken-burns crossfade between hotel scenes,
  * with a drifting light sweep and gentle pointer parallax.
  */
 export function HeroBackdrop() {
+  const slides = useHeroImages("hero_background");
   const root = useRef<HTMLDivElement>(null);
   const layer = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);

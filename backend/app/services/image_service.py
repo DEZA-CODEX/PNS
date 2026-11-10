@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from PIL import Image, ImageOps, UnidentifiedImageError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 try:
@@ -27,7 +28,7 @@ from app.services.image_storage import (
 )
 from app.repositories.image_repository import (
     disable_bundled_image,
-    disable_managed_image,
+    delete_managed_image_record,
     get_managed_image,
     get_managed_image_content,
     list_about_managed_images,
@@ -285,47 +286,57 @@ async def delete_managed_image(
         is_storage_image = (
             row.get("source_type") == "upload"
             and not row.get("has_database_content")
-            and row.get("content_type") == "image/webp"
             and row.get("storage_path")
         )
+        backup: bytes | None = None
+        storage_path: str | None = None
         if is_storage_image:
-            if not row.get("is_active", True):
-                raise ImageManagementError(
-                    "not_found", "The image was not found in this category.", 404
-                )
             storage_path = managed_object_path(
                 collection, category, str(row["storage_path"])
             )
             backup = await get_object(storage_path)
-            if backup is None:
+            if backup is not None:
+                await delete_object(storage_path)
+            if await get_object(storage_path) is not None:
                 raise ImageManagementError(
-                    "storage_object_missing",
-                    "The uploaded image record points to a missing Supabase Storage object.",
+                    "storage_delete_unverified",
+                    "The Supabase Storage object still exists after deletion was requested.",
                     502,
                 )
-            updated = await disable_managed_image(db, image_id, collection, category)
-            if updated is None:
+        try:
+            deleted = await delete_managed_image_record(db, image_id, collection, category)
+            if not deleted:
                 raise ImageManagementError(
                     "not_found", "The image was not found in this category.", 404
                 )
-            await delete_object(storage_path)
-            logger.info(
-                "Disabled managed image and removed Storage object (collection=%s, category=%s, image_id=%s).",
+            await db.flush()
+            if await get_managed_image(db, collection, category, image_id) is not None:
+                raise ImageManagementError(
+                    "database_delete_unverified",
+                    "The image mapping still exists after deletion was requested.",
+                    503,
+                )
+        except SQLAlchemyError as error:
+            await db.rollback()
+            logger.exception(
+                "Image mapping deletion failed after Storage cleanup (collection=%s, category=%s, image_id=%s).",
                 collection,
                 category,
                 image_id,
             )
-            return {"storage_path": storage_path, "backup": backup}
-        if not row.get("is_active", True):
             raise ImageManagementError(
-                "not_found", "The image was not found in this category.", 404
-            )
-        updated = await disable_managed_image(db, image_id, collection, category)
-        if updated is None:
-            raise ImageManagementError(
-                "not_found", "The image was not found in this category.", 404
-            )
-        return None
+                "database_delete_failed",
+                "The image object is absent from Storage, but its database mapping could not be removed. Retry the delete request to reconcile it.",
+                503,
+            ) from error
+        logger.info(
+            "Deleted managed image mapping (collection=%s, category=%s, image_id=%s, storage_object_deleted=%s).",
+            collection,
+            category,
+            image_id,
+            bool(storage_path),
+        )
+        return {"record_id": image_id, "storage_path": storage_path, "backup": backup}
     if not image_id.startswith(f"{category}:"):
         raise ImageManagementError("not_found", "The image was not found in this category.", 404)
     await disable_bundled_image(db, image_id, collection, category)

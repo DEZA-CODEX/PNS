@@ -6,6 +6,17 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+IMAGE_SELECTION_COLUMNS = {
+    "homepage": "selected_homepage",
+    "roomsPage": "selected_rooms_page",
+    "gallery": "selected_gallery",
+    "diningPage": "selected_dining_page",
+    "diningHero": "selected_dining_hero",
+    "aboutPage": "selected_about_page",
+    "heroBackground": "selected_hero_background",
+    "heroContainer": "selected_hero_container",
+}
+
 
 def _uuid_param(value: str | UUID | None) -> UUID | None:
     if value is None or isinstance(value, UUID):
@@ -44,6 +55,9 @@ def _image(row: dict[str, Any]) -> dict[str, Any]:
         "displayLocation": row.get("display_location") or "gallery",
         "displayOrder": int(row.get("display_order") or 0),
         "active": bool(row.get("is_active", True)),
+        "selections": {
+            key: bool(row.get(column, False)) for key, column in IMAGE_SELECTION_COLUMNS.items()
+        },
         "updatedAt": updated.isoformat() if hasattr(updated, "isoformat") else updated,
     }
 
@@ -55,9 +69,12 @@ async def list_managed_images(
     display_location: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     statement = """
-        SELECT id, category_id, public_url, storage_path, source_type, content_type,
+         SELECT id, category_id, public_url, storage_path, source_type, content_type,
                image_data IS NOT NULL AS has_database_content,
-               display_location, display_order, is_active, updated_at
+             display_location, display_order, is_active, updated_at,
+             selected_homepage, selected_rooms_page, selected_gallery,
+             selected_dining_page, selected_dining_hero, selected_about_page,
+             selected_hero_background, selected_hero_container
           FROM public.managed_images
          WHERE category_type = :collection AND category_id = :category AND is_active
     """
@@ -96,9 +113,12 @@ async def list_collection_managed_images(
     result = await db.execute(
         text(
             f"""
-            SELECT id, category_id, public_url, storage_path, source_type, content_type,
+                 SELECT id, category_id, public_url, storage_path, source_type, content_type,
                    image_data IS NOT NULL AS has_database_content,
-                   display_location, display_order, is_active, updated_at
+                     display_location, display_order, is_active, updated_at,
+                     selected_homepage, selected_rooms_page, selected_gallery,
+                     selected_dining_page, selected_dining_hero, selected_about_page,
+                     selected_hero_background, selected_hero_container
               FROM public.managed_images
              WHERE category_type = :collection
                AND category_id IN ({placeholders})
@@ -141,16 +161,21 @@ async def list_homepage_managed_images(
     result = await db.execute(
         text(
             """
-            SELECT id, category_type, category_id, public_url, storage_path, source_type, content_type,
+                 SELECT id, category_type, category_id, public_url, storage_path, source_type, content_type,
                    image_data IS NOT NULL AS has_database_content,
-                   display_location, display_order, is_active, updated_at
+                     display_location, display_order, is_active, updated_at,
+                     selected_homepage, selected_rooms_page, selected_gallery,
+                     selected_dining_page, selected_dining_hero, selected_about_page,
+                     selected_hero_background, selected_hero_container
               FROM public.managed_images
-             WHERE category_type IN ('room', 'dining') AND is_active
+                  WHERE category_type IN ('room', 'dining', 'hero') AND is_active
              ORDER BY category_type, category_id, display_order, created_at
             """
         )
     )
-    images: dict[str, dict[str, list[dict[str, Any]]]] = {"room": {}, "dining": {}}
+    images: dict[str, dict[str, list[dict[str, Any]]]] = {
+        "room": {}, "dining": {}, "hero": {}
+    }
     for row in result.mappings():
         mapped = dict(row)
         collection = str(mapped["category_type"])
@@ -162,13 +187,13 @@ async def list_homepage_managed_images(
             """
             SELECT category_type, category_id, legacy_id
               FROM public.managed_images
-             WHERE category_type IN ('room', 'dining')
+             WHERE category_type IN ('room', 'dining', 'hero')
                AND source_type = 'bundled' AND NOT is_active AND legacy_id IS NOT NULL
              ORDER BY category_type, category_id, legacy_id
             """
         )
     )
-    disabled: dict[str, dict[str, list[str]]] = {"room": {}, "dining": {}}
+    disabled: dict[str, dict[str, list[str]]] = {"room": {}, "dining": {}, "hero": {}}
     for row in hidden_result.mappings():
         mapped = dict(row)
         collection = str(mapped["category_type"])
@@ -187,9 +212,12 @@ async def list_about_managed_images(
     result = await db.execute(
         text(
             """
-            SELECT id, category_type, category_id, public_url, storage_path, source_type, content_type,
+                 SELECT id, category_type, category_id, public_url, storage_path, source_type, content_type,
                    image_data IS NOT NULL AS has_database_content,
-                   display_location, display_order, is_active, updated_at
+                     display_location, display_order, is_active, updated_at,
+                     selected_homepage, selected_rooms_page, selected_gallery,
+                     selected_dining_page, selected_dining_hero, selected_about_page,
+                     selected_hero_background, selected_hero_container
               FROM public.managed_images
              WHERE category_type = 'dining' AND is_active
              ORDER BY category_id, display_order, created_at
@@ -231,9 +259,12 @@ async def get_managed_image(
     result = await db.execute(
         text(
             """
-            SELECT id, category_id, public_url, storage_path, source_type, content_type,
+                 SELECT id, category_id, public_url, storage_path, source_type, content_type,
                    image_data IS NOT NULL AS has_database_content,
-                   display_location, display_order, is_active, updated_at, created_by
+                     display_location, display_order, is_active, updated_at, created_by,
+                     selected_homepage, selected_rooms_page, selected_gallery,
+                     selected_dining_page, selected_dining_hero, selected_about_page,
+                     selected_hero_background, selected_hero_container
               FROM public.managed_images
              WHERE category_type = :collection AND category_id = :category AND id = :image_id
              LIMIT 1
@@ -279,17 +310,41 @@ async def save_managed_image(
     image_data: bytes | None = None,
     content_type: str | None = None,
 ) -> dict[str, Any]:
+    selection_values = (
+        {
+            "selected_homepage": True,
+            "selected_rooms_page": True,
+            "selected_gallery": True,
+        }
+        if collection == "room"
+        else {
+            "selected_homepage": True,
+            "selected_dining_page": True,
+            "selected_dining_hero": True,
+            "selected_about_page": True,
+            "selected_gallery": True,
+        }
+    )
     result = await db.execute(
         text(
             """
             INSERT INTO public.managed_images
                 (category_type, category_id, public_url, storage_path, source_type,
-                 created_by, image_data, content_type)
+                 created_by, image_data, content_type,
+                 selected_homepage, selected_rooms_page, selected_gallery,
+                 selected_dining_page, selected_dining_hero, selected_about_page,
+                 selected_hero_background, selected_hero_container)
             VALUES (:collection, :category, :url, :storage_path, :source_type,
-                    :created_by, :image_data, :content_type)
+                    :created_by, :image_data, :content_type,
+                    :selected_homepage, :selected_rooms_page, :selected_gallery,
+                    :selected_dining_page, :selected_dining_hero, :selected_about_page,
+                    :selected_hero_background, :selected_hero_container)
             RETURNING id, category_id, public_url, storage_path, source_type, content_type,
                       image_data IS NOT NULL AS has_database_content,
-                      display_location, display_order, is_active, updated_at
+                      display_location, display_order, is_active, updated_at,
+                      selected_homepage, selected_rooms_page, selected_gallery,
+                      selected_dining_page, selected_dining_hero, selected_about_page,
+                      selected_hero_background, selected_hero_container
             """
         ),
         {
@@ -301,6 +356,16 @@ async def save_managed_image(
             "created_by": _uuid_param(created_by),
             "image_data": image_data,
             "content_type": content_type,
+            **{
+                "selected_homepage": selection_values.get("selected_homepage", False),
+                "selected_rooms_page": selection_values.get("selected_rooms_page", False),
+                "selected_gallery": selection_values.get("selected_gallery", False),
+                "selected_dining_page": selection_values.get("selected_dining_page", False),
+                "selected_dining_hero": selection_values.get("selected_dining_hero", False),
+                "selected_about_page": selection_values.get("selected_about_page", False),
+                "selected_hero_background": False,
+                "selected_hero_container": False,
+            },
         },
     )
     row = result.mappings().one()
@@ -356,6 +421,26 @@ async def disable_managed_image(
     return dict(row) if row is not None else None
 
 
+async def delete_managed_image_record(
+    db: AsyncSession, image_id: str, collection: str, category: str
+) -> bool:
+    image_uuid = _uuid_param(image_id)
+    if image_uuid is None:
+        return False
+    result = await db.execute(
+        text(
+            """
+            DELETE FROM public.managed_images
+             WHERE id = :image_id AND category_type = :collection
+               AND category_id = :category
+            RETURNING id
+            """
+        ),
+        {"image_id": image_uuid, "collection": collection, "category": category},
+    )
+    return result.scalar_one_or_none() is not None
+
+
 async def disable_bundled_image(
     db: AsyncSession, image_id: str, collection: str, category: str
 ) -> None:
@@ -384,6 +469,7 @@ async def update_managed_image(
         "display_location": "display_location",
         "display_order": "display_order",
         "is_active": "is_active",
+        **IMAGE_SELECTION_COLUMNS,
     }
     selected = [(columns[key], value) for key, value in patch.items() if key in columns]
     if not selected:
@@ -399,7 +485,10 @@ async def update_managed_image(
             UPDATE public.managed_images SET {set_clause}
              WHERE id = :image_id AND category_type = :collection
             RETURNING id, category_type, category_id, public_url, storage_path, source_type,
-                      display_location, display_order, is_active
+                      display_location, display_order, is_active,
+                      selected_homepage, selected_rooms_page, selected_gallery,
+                      selected_dining_page, selected_dining_hero, selected_about_page,
+                      selected_hero_background, selected_hero_container
             """
         ),
         params,

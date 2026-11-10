@@ -44,6 +44,7 @@ from app.repositories.admin_repository import (
     update_group,
     write_audit_event,
 )
+from app.repositories.image_repository import IMAGE_SELECTION_COLUMNS, get_managed_image
 from app.services.admin_service import (
     authenticate_admin,
     create_password_hash,
@@ -542,6 +543,20 @@ async def patch_group(
         if not isinstance(body["isActive"], bool):
             raise AdminAuthError("validation", "Active state must be boolean.", 400)
         patch["is_active"] = body["isActive"]
+    if "selections" in body:
+        selections = body["selections"]
+        allowed_selections = (
+            {"homepage", "roomsPage", "gallery"}
+            if category == "room"
+            else {"homepage", "diningPage", "diningHero", "aboutPage", "gallery"}
+        )
+        if not isinstance(selections, dict) or not selections:
+            raise AdminAuthError("validation", "Image selections must be a non-empty object.", 400)
+        if any(key not in allowed_selections for key in selections):
+            raise AdminAuthError("validation", "One or more image destinations are invalid.", 400)
+        if any(not isinstance(value, bool) for value in selections.values()):
+            raise AdminAuthError("validation", "Image selections must be boolean.", 400)
+        patch.update(selections)
     if not patch:
         raise AdminAuthError("validation", "No group changes were supplied.", 400)
     try:
@@ -737,6 +752,16 @@ async def _upload_files(
                         "Could not clean up an image object after upload transaction failure."
                     )
             raise
+        if storage_cleanup and storage_cleanup.get("record_id"):
+            remaining = await get_managed_image(
+                db, collection, category, str(storage_cleanup["record_id"])
+            )
+            if remaining is not None:
+                raise ImageManagementError(
+                    "database_delete_unverified",
+                    "The Storage object was removed, but the image mapping still exists.",
+                    503,
+                )
         return JSONResponse(
             {
                 "success": True,
