@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from datetime import datetime, timezone
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -20,11 +21,13 @@ from sqlalchemy.exc import OperationalError
 from app.core.admin_types import AdminContext
 from app.core.config import Settings, database_url_for_asyncpg, get_settings
 from app.core.database import get_db_session
-from app.core.exceptions import ServiceUnavailableError
+from app.core.exceptions import ImageManagementError, ServiceUnavailableError
 from app.core.responses import JSONResponse
 from app.core.security import hash_password, verify_password
 from app.cli import _legacy_image_path
 from app.main import app, fastapi_app, lifespan
+from app.repositories import image_repository
+from app.services import image_service, image_storage
 from app.services.image_service import (
     _process_image,
     add_external_image,
@@ -835,6 +838,22 @@ def test_image_validation_keeps_webp_content() -> None:
     assert converted is False
 
 
+@pytest.mark.parametrize("image_format", ["JPEG", "PNG", "WEBP", "GIF", "TIFF", "BMP", "AVIF"])
+def test_supported_static_formats_produce_valid_webp(image_format: str) -> None:
+    output, _, _ = _process_image(_image_bytes(image_format), f"source.{image_format.lower()}")
+    with Image.open(io.BytesIO(output)) as image:
+        assert image.format == "WEBP"
+
+
+def test_transparent_png_keeps_alpha_after_webp_conversion() -> None:
+    output = io.BytesIO()
+    Image.new("RGBA", (4, 3), color=(18, 40, 90, 0)).save(output, format="PNG")
+    converted, _, _ = _process_image(output.getvalue(), "transparent.png")
+    with Image.open(io.BytesIO(converted)) as image:
+        assert image.format == "WEBP"
+        assert "A" in image.getbands()
+
+
 def test_image_validation_rejects_non_image_and_oversized_input() -> None:
     with pytest.raises(Exception) as invalid:
         _process_image(b"not an image", "bad.png")
@@ -869,23 +888,26 @@ def test_external_image_creation_returns_database_record(
     assert image == {"id": "image-id", "url": "https://images.example/room.webp"}
 
 
-def test_uploaded_image_bytes_are_saved_in_database(
+def test_uploaded_image_is_saved_to_storage_and_only_metadata_is_saved_in_database(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
 ) -> None:
-    settings = Settings(_env_file=None, image_storage_dir=str(tmp_path))
-    monkeypatch.setattr("app.services.image_service.get_settings", lambda: settings)
     saved: dict[str, object] = {}
+    stored: dict[str, object] = {}
+
+    async def upload_object(path: str, data: bytes) -> str:
+        stored.update(path=path, data=data)
+        return "https://project.supabase.co/storage/v1/object/public/pns-images/" + path
 
     async def save_image(*_args: object, **kwargs: object) -> dict[str, object]:
         saved.update(kwargs)
         return {
             "id": "image-id",
-            "url": "/api/v1/images/content/image-id",
+            "url": str(kwargs["url"]),
             "filename": str(kwargs["storage_path"]).rsplit("/", 1)[-1],
         }
 
-    monkeypatch.setattr("app.services.image_service.save_managed_image", save_image)
+    monkeypatch.setattr(image_service, "upload_object", upload_object)
+    monkeypatch.setattr(image_service, "save_managed_image", save_image)
     image = asyncio.run(
         add_uploaded_image(
             object(), "room", "vajra", "room.png", _image_bytes(), "admin-id"
@@ -894,9 +916,275 @@ def test_uploaded_image_bytes_are_saved_in_database(
 
     assert saved["source_type"] == "upload"
     assert saved["content_type"] == "image/webp"
-    assert saved["image_data"]
-    assert image["url"] == "/api/v1/images/content/image-id"
-    assert not list(tmp_path.iterdir())
+    assert saved["image_data"] is None
+    assert str(saved["storage_path"]).startswith("uploads/room/vajra/")
+    assert stored["path"] == saved["storage_path"]
+    with Image.open(io.BytesIO(stored["data"])) as stored_image:
+        assert stored_image.format == "WEBP"
+    assert image["url"].startswith("https://project.supabase.co/storage/")
+
+
+def test_uploaded_image_rejects_empty_file() -> None:
+    with pytest.raises(Exception) as empty:
+        _process_image(b"", "empty.png")
+    assert getattr(empty.value, "code", None) == "empty_file"
+
+
+def test_storage_backed_image_content_is_read_from_storage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def get_content(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return {
+            "image_data": None,
+            "content_type": "image/webp",
+            "source_type": "upload",
+            "storage_path": "uploads/room/vajra/room.webp",
+            "public_url": "",
+            "category_type": "room",
+            "category_id": "vajra",
+        }
+
+    async def get_object(path: str) -> bytes:
+        assert path == "uploads/room/vajra/room.webp"
+        return b"stored webp bytes"
+
+    monkeypatch.setattr(image_service, "get_managed_image_content", get_content)
+    monkeypatch.setattr(image_service, "get_object", get_object)
+    result = asyncio.run(image_service.image_content(object(), "image-id"))
+    assert result is not None
+    assert result["image_data"] == b"stored webp bytes"
+
+
+def test_uploaded_image_urls_choose_database_or_storage_urls() -> None:
+    legacy = image_repository._image(
+        {
+            "id": "legacy-id",
+            "category_id": "vajra",
+            "source_type": "upload",
+            "storage_path": "uploads/room/vajra/legacy.webp",
+            "has_database_content": True,
+        }
+    )
+    public = image_repository._image(
+        {
+            "id": "storage-id",
+            "category_id": "vajra",
+            "source_type": "upload",
+            "storage_path": "uploads/room/vajra/storage.webp",
+            "content_type": "image/webp",
+            "has_database_content": False,
+            "public_url": "https://project.supabase.co/storage/v1/object/public/pns-images/uploads/room/vajra/storage.webp",
+        }
+    )
+    private = image_repository._image(
+        {
+            "id": "private-id",
+            "category_id": "vajra",
+            "source_type": "upload",
+            "storage_path": "uploads/room/vajra/private.webp",
+            "content_type": "image/webp",
+            "has_database_content": False,
+            "public_url": "",
+        }
+    )
+    assert legacy["url"].startswith("/api/v1/images/content/legacy-id")
+    assert public["url"].startswith("https://project.supabase.co/storage/")
+    assert private["url"].startswith("/api/v1/images/content/private-id")
+
+
+def test_external_url_validation_rejects_credentials_and_bad_ports() -> None:
+    for image_url in (
+        "javascript:alert(1)",
+        "https://user:pass@images.example/a.webp",
+        "https://images.example:bad/a.webp",
+    ):
+        with pytest.raises(Exception) as invalid:
+            asyncio.run(
+                add_external_image(
+                    object(), "room", "vajra", image_url, "admin-id"
+                )
+            )
+        assert getattr(invalid.value, "code", None) == "invalid_url"
+
+
+def test_storage_path_is_limited_to_expected_category_prefix() -> None:
+    assert image_storage.managed_object_path(
+        "room", "vajra", "uploads/room/vajra/file.webp"
+    ) == "uploads/room/vajra/file.webp"
+    for path in (
+        "uploads/room/garuda/file.webp",
+        "uploads/room/vajra/../file.webp",
+        "uploads/room/vajra/subfolder/file.webp",
+    ):
+        with pytest.raises(Exception) as invalid:
+            image_storage.managed_object_path("room", "vajra", path)
+        assert getattr(invalid.value, "code", None) == "invalid_storage_path"
+
+
+def test_storage_upload_verifies_bytes_and_public_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        supabase_url="https://project.supabase.co",
+        supabase_secret_key="test-secret",
+        supabase_storage_bucket="pns-images",
+        supabase_storage_public=True,
+    )
+    monkeypatch.setattr(image_storage, "get_settings", lambda: settings)
+    requests: list[tuple[str, str, dict[str, str], bytes | None]] = []
+    stored_bytes = b"verified webp data"
+
+    async def request(
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        content: bytes | None = None,
+        json: dict | None = None,
+    ) -> httpx.Response:
+        requests.append((method, url, headers, content))
+        if method == "POST":
+            return httpx.Response(200)
+        if method == "GET":
+            return httpx.Response(200, content=stored_bytes)
+        raise AssertionError(f"Unexpected method: {method}")
+
+    monkeypatch.setattr(image_storage, "_request", request)
+    url = asyncio.run(
+        image_storage.upload_object("uploads/room/vajra/example.webp", stored_bytes)
+    )
+
+    assert url == "https://project.supabase.co/storage/v1/object/public/pns-images/uploads/room/vajra/example.webp"
+    assert requests[0][0] == "POST"
+    assert requests[0][2]["Content-Type"] == "image/webp"
+    assert requests[0][2]["x-upsert"] == "false"
+    assert requests[0][3] == stored_bytes
+    assert requests[1][0] == "GET"
+    assert requests[1][2]["Authorization"] == "Bearer test-secret"
+    assert requests[2][0] == "GET" and requests[2][2] == {}
+
+
+def test_storage_upload_fails_when_object_verification_differs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        supabase_url="https://project.supabase.co",
+        supabase_secret_key="test-secret",
+        supabase_storage_bucket="pns-images",
+    )
+    monkeypatch.setattr(image_storage, "get_settings", lambda: settings)
+    methods: list[str] = []
+
+    async def request(
+        method: str,
+        _url: str,
+        *,
+        headers: dict[str, str],
+        content: bytes | None = None,
+        json: dict | None = None,
+    ) -> httpx.Response:
+        methods.append(method)
+        return httpx.Response(200, content=b"different bytes" if method == "GET" else b"")
+
+    monkeypatch.setattr(image_storage, "_request", request)
+    with pytest.raises(Exception) as failed:
+        asyncio.run(
+            image_storage.upload_object(
+                "uploads/room/vajra/example.webp", b"expected bytes"
+            )
+        )
+    assert getattr(failed.value, "code", None) == "storage_verification_failed"
+    assert methods == ["POST", "GET", "DELETE"]
+
+
+def test_storage_requires_backend_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(image_storage, "get_settings", lambda: Settings(_env_file=None))
+    with pytest.raises(Exception) as missing:
+        image_storage._storage_settings()
+    assert getattr(missing.value, "code", None) == "storage_not_configured"
+
+
+def test_storage_image_delete_reads_backup_and_disables_only_matching_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, object]] = []
+    row = {
+        "source_type": "upload",
+        "has_database_content": False,
+        "content_type": "image/webp",
+        "storage_path": "uploads/room/vajra/room.webp",
+        "is_active": True,
+    }
+
+    async def get_image(*_args: object) -> dict[str, object]:
+        return row
+
+    async def get_object(path: str) -> bytes:
+        calls.append(("read", path))
+        return b"stored image bytes"
+
+    async def disable_image(*args: object) -> dict[str, object]:
+        calls.append(("disable", args))
+        return {"id": "image-id"}
+
+    async def delete_object(path: str) -> None:
+        calls.append(("delete", path))
+
+    monkeypatch.setattr(image_service, "get_managed_image", get_image)
+    monkeypatch.setattr(image_service, "get_object", get_object)
+    monkeypatch.setattr(image_service, "disable_managed_image", disable_image)
+    monkeypatch.setattr(image_service, "delete_object", delete_object)
+    result = asyncio.run(
+        image_service.delete_managed_image(
+            object(), "room", "vajra", "image-id"
+        )
+    )
+
+    assert calls[0] == ("read", "uploads/room/vajra/room.webp")
+    assert calls[1][0] == "disable"
+    assert calls[2] == ("delete", "uploads/room/vajra/room.webp")
+    assert result == {
+        "storage_path": "uploads/room/vajra/room.webp",
+        "backup": b"stored image bytes",
+    }
+
+
+def test_storage_delete_failure_is_not_reported_as_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row = {
+        "source_type": "upload",
+        "has_database_content": False,
+        "content_type": "image/webp",
+        "storage_path": "uploads/room/vajra/room.webp",
+        "is_active": True,
+    }
+
+    async def get_image(*_args: object) -> dict[str, object]:
+        return row
+
+    async def get_object(_path: str) -> bytes:
+        return b"stored image bytes"
+
+    async def disable_image(*_args: object) -> dict[str, object]:
+        return {"id": "image-id"}
+
+    async def delete_object(_path: str) -> None:
+        raise ImageManagementError("storage_error", "Storage deletion failed.", 502)
+
+    monkeypatch.setattr(image_service, "get_managed_image", get_image)
+    monkeypatch.setattr(image_service, "get_object", get_object)
+    monkeypatch.setattr(image_service, "disable_managed_image", disable_image)
+    monkeypatch.setattr(image_service, "delete_object", delete_object)
+    with pytest.raises(ImageManagementError) as failed:
+        asyncio.run(
+            image_service.delete_managed_image(
+                object(), "room", "vajra", "image-id"
+            )
+        )
+    assert failed.value.code == "storage_error"
 
 
 def test_legacy_image_migration_resolves_only_paths_inside_upload_root(tmp_path) -> None:

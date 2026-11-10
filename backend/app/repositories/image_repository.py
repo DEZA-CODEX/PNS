@@ -20,15 +20,18 @@ def _image(row: dict[str, Any]) -> dict[str, Any]:
     updated = row.get("updated_at")
     cache_version = str(updated or row["id"])
     is_database_image = bool(row.get("has_database_content"))
-    url = (
-        f"/api/v1/images/content/{row['id']}"
-        if is_database_image
-        else str(row.get("public_url") or "")
+    storage_path = str(row["storage_path"]) if row.get("storage_path") else None
+    is_storage_image = (
+        row.get("source_type") == "upload"
+        and row.get("content_type") == "image/webp"
+        and storage_path is not None
     )
+    url = str(row.get("public_url") or "")
+    if is_database_image or (is_storage_image and not url):
+        url = f"/api/v1/images/content/{row['id']}"
     if url:
         separator = "&" if "?" in url else "?"
         url = f"{url}{separator}v={''.join(c for c in cache_version if c.isalnum() or c in '_-')}"
-    storage_path = str(row["storage_path"]) if row.get("storage_path") else None
     return {
         "id": str(row["id"]),
         "category": str(row["category_id"]),
@@ -50,7 +53,7 @@ async def list_managed_images(
     display_location: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     statement = """
-        SELECT id, category_id, public_url, storage_path, source_type,
+        SELECT id, category_id, public_url, storage_path, source_type, content_type,
                image_data IS NOT NULL AS has_database_content,
                display_location, display_order, is_active, updated_at
           FROM public.managed_images
@@ -91,7 +94,7 @@ async def list_collection_managed_images(
     result = await db.execute(
         text(
             f"""
-            SELECT id, category_id, public_url, storage_path, source_type,
+            SELECT id, category_id, public_url, storage_path, source_type, content_type,
                    image_data IS NOT NULL AS has_database_content,
                    display_location, display_order, is_active, updated_at
               FROM public.managed_images
@@ -136,7 +139,7 @@ async def list_homepage_managed_images(
     result = await db.execute(
         text(
             """
-            SELECT id, category_type, category_id, public_url, storage_path, source_type,
+            SELECT id, category_type, category_id, public_url, storage_path, source_type, content_type,
                    image_data IS NOT NULL AS has_database_content,
                    display_location, display_order, is_active, updated_at
               FROM public.managed_images
@@ -182,7 +185,7 @@ async def list_about_managed_images(
     result = await db.execute(
         text(
             """
-            SELECT id, category_type, category_id, public_url, storage_path, source_type,
+            SELECT id, category_type, category_id, public_url, storage_path, source_type, content_type,
                    image_data IS NOT NULL AS has_database_content,
                    display_location, display_order, is_active, updated_at
               FROM public.managed_images
@@ -226,7 +229,7 @@ async def get_managed_image(
     result = await db.execute(
         text(
             """
-            SELECT id, category_id, public_url, storage_path, source_type,
+            SELECT id, category_id, public_url, storage_path, source_type, content_type,
                    image_data IS NOT NULL AS has_database_content,
                    display_location, display_order, is_active, updated_at, created_by
               FROM public.managed_images
@@ -282,7 +285,7 @@ async def save_managed_image(
                  created_by, image_data, content_type)
             VALUES (:collection, :category, :url, :storage_path, :source_type,
                     :created_by, :image_data, :content_type)
-            RETURNING id, category_id, public_url, storage_path, source_type,
+            RETURNING id, category_id, public_url, storage_path, source_type, content_type,
                       image_data IS NOT NULL AS has_database_content,
                       display_location, display_order, is_active, updated_at
             """
@@ -309,10 +312,11 @@ async def get_managed_image_content(db: AsyncSession, image_id: str) -> dict[str
     result = await db.execute(
         text(
             """
-            SELECT image_data, content_type
+                        SELECT image_data, content_type, source_type, storage_path,
+                                     category_type, category_id
               FROM public.managed_images
              WHERE id = :image_id AND source_type = 'upload'
-               AND is_active AND image_data IS NOT NULL
+               AND is_active AND (image_data IS NOT NULL OR content_type = 'image/webp')
              LIMIT 1
             """
         ),
@@ -322,7 +326,8 @@ async def get_managed_image_content(db: AsyncSession, image_id: str) -> dict[str
     if row is None:
         return None
     image = dict(row)
-    image["image_data"] = bytes(image["image_data"])
+    if image["image_data"] is not None:
+        image["image_data"] = bytes(image["image_data"])
     return image
 
 

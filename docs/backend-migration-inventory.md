@@ -129,9 +129,15 @@ configured Supabase PostgreSQL endpoint.
   table.
 - Upload limits and validation match the existing workflow: 8 MiB per file, supported detected
   image formats, animation rejection, 64-million-pixel limit, and WebP output.
-- New uploads are validated and converted to WebP, then their bytes and metadata are stored in
-  PostgreSQL. The public image-content endpoint reads from `managed_images.image_data`.
+- New uploaded files are validated and converted to WebP, then written to the configured existing
+  Supabase Storage bucket under `uploads/{room|dining}/{category}/`. PostgreSQL stores the object
+  path, public URL when enabled, and content type; new rows leave `image_data` null.
+- Legacy uploads with PostgreSQL `image_data` remain served by the existing image-content endpoint.
+  New private-bucket objects are served through that endpoint by reading from Supabase Storage;
+  public-bucket objects use a verified Supabase public URL.
 - External image URLs remain references and are not fetched by the backend.
+- `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_STORAGE_BUCKET`, and
+  `SUPABASE_STORAGE_PUBLIC` are backend-only settings. Buckets are not created by the application.
 - `npm run migrate:image-files` copies legacy uploaded files into matching database rows and
   retains local source files until the operator verifies the migration.
 

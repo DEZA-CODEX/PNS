@@ -15,6 +15,10 @@ values must never be copied into the frontend environment.
 | `CORS_ORIGINS`             | FastAPI      | Comma-separated exact browser origins allowed to call the API with credentials.                          |
 | `PNS_ALLOWED_HOSTS`        | FastAPI      | Comma-separated API hostnames accepted by FastAPI's host validation.                                     |
 | `DATABASE_URL`             | FastAPI only | PostgreSQL connection string for the existing Supabase database.                                         |
+| `SUPABASE_URL`             | FastAPI only | Supabase project origin used by the backend Storage REST API.                                             |
+| `SUPABASE_SECRET_KEY`      | FastAPI only | Secret/service-role key used only by FastAPI to manage bucket objects.                                    |
+| `SUPABASE_STORAGE_BUCKET`  | FastAPI only | Existing Storage bucket name; the application does not create buckets.                                     |
+| `SUPABASE_STORAGE_PUBLIC`  | FastAPI only | Set `true` only for a public bucket; defaults to `false` and serves bytes through FastAPI.                  |
 | `PNS_SECURE_COOKIES`       | FastAPI      | Explicitly overrides the Secure cookie flag. Use `true` over HTTPS.                                      |
 | `PNS_COOKIE_SAMESITE`      | FastAPI      | `lax` by default; use `none` only for cross-site HTTPS deployments.                                      |
 | `PNS_COOKIE_DOMAIN`        | FastAPI      | Optional cookie domain, e.g. a shared parent domain for frontend/API subdomains.                         |
@@ -43,6 +47,10 @@ FRONTEND_URL=http://localhost:3000
 CORS_ORIGINS=http://localhost:3000
 PNS_ALLOWED_HOSTS=localhost,127.0.0.1
 DATABASE_URL=
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SECRET_KEY=your-backend-only-secret-key
+SUPABASE_STORAGE_BUCKET=your-existing-image-bucket
+SUPABASE_STORAGE_PUBLIC=false
 ```
 
 Install backend dependencies with `python -m pip install -r requirements-dev.txt` from `backend/`.
@@ -66,6 +74,10 @@ FRONTEND_URL=https://your-frontend-domain.example
 CORS_ORIGINS=https://your-frontend-domain.example
 PNS_ALLOWED_HOSTS=your-backend-hostname.example
 DATABASE_URL=your-database-url
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SECRET_KEY=your-backend-only-secret-key
+SUPABASE_STORAGE_BUCKET=your-existing-image-bucket
+SUPABASE_STORAGE_PUBLIC=false
 PNS_SECURE_COOKIES=true
 PNS_COOKIE_SAMESITE=none
 PNS_SESSION_DURATION_MINUTES=480
@@ -76,6 +88,13 @@ Keep the real database URL only in the backend environment. Set `REDIS_URL` only
 Redis service is configured. `CORS_ORIGINS` accepts comma-separated exact origins (scheme and
 optional port, no path); `PNS_ALLOWED_HOSTS` accepts comma-separated hostnames only. Neither
 setting accepts wildcards. Do not use `0.0.0.0` as an allowed public host.
+Create or select the intended bucket in the Supabase project before enabling uploads; the backend
+does not create buckets. Keep `SUPABASE_SECRET_KEY` in the backend Vercel project only and never
+in a `NEXT_PUBLIC_*` variable. Private buckets are supported: FastAPI reads the object with the
+backend key, while public buckets return verified Supabase public URLs. Objects retain the
+existing `uploads/room/<category>/...` and `uploads/dining/<category>/...` paths. Check the bucket's
+actual access setting before setting `SUPABASE_STORAGE_PUBLIC=true`; no bucket is declared by
+this repository.
 
 Because `NEXT_PUBLIC_API_BASE_URL` is a public build-time variable, rebuild/redeploy Next.js after
 changing it. The frontend and backend Vercel projects deploy independently. After changing
