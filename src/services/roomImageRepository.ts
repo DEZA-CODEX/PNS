@@ -147,9 +147,7 @@ async function mergeServerRoomImages(result: RoomImageLoadResult, endpoint = "/i
     );
     result.images.sort((left, right) => left.storageKey.localeCompare(right.storageKey));
   } catch {
-    result.warnings.push(
-      "Room image mappings could not be loaded from the database.",
-    );
+    result.warnings.push("Room image mappings could not be loaded from the database.");
   }
   return result;
 }
@@ -339,9 +337,7 @@ async function mergeServerDiningImages(
     result.displayCounts = displayCounts;
     result.images.sort((left, right) => left.storageKey.localeCompare(right.storageKey));
   } catch {
-    result.warnings.push(
-      "Dining image mappings could not be loaded from the database.",
-    );
+    result.warnings.push("Dining image mappings could not be loaded from the database.");
   }
   return result;
 }
@@ -531,4 +527,3 @@ export function getRoomImageCounts(images: RoomImage[], roomType: RoomType) {
     ]),
   ) as Record<RoomImageDestination, number>;
 }
-

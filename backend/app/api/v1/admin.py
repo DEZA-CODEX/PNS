@@ -543,20 +543,6 @@ async def patch_group(
         if not isinstance(body["isActive"], bool):
             raise AdminAuthError("validation", "Active state must be boolean.", 400)
         patch["is_active"] = body["isActive"]
-    if "selections" in body:
-        selections = body["selections"]
-        allowed_selections = (
-            {"homepage", "roomsPage", "gallery"}
-            if category == "room"
-            else {"homepage", "diningPage", "diningHero", "aboutPage", "gallery"}
-        )
-        if not isinstance(selections, dict) or not selections:
-            raise AdminAuthError("validation", "Image selections must be a non-empty object.", 400)
-        if any(key not in allowed_selections for key in selections):
-            raise AdminAuthError("validation", "One or more image destinations are invalid.", 400)
-        if any(not isinstance(value, bool) for value in selections.values()):
-            raise AdminAuthError("validation", "Image selections must be boolean.", 400)
-        patch.update(selections)
     if not patch:
         raise AdminAuthError("validation", "No group changes were supplied.", 400)
     try:
@@ -1053,6 +1039,20 @@ async def patch_managed_image(
         if not isinstance(body["isActive"], bool):
             raise AdminAuthError("validation", "Active state must be boolean.", 400)
         patch["is_active"] = body["isActive"]
+    if "selections" in body:
+        selections = body["selections"]
+        allowed_selections = (
+            {"homepage", "roomsPage", "gallery"}
+            if category == "room"
+            else {"homepage", "diningPage", "diningHero", "aboutPage", "gallery"}
+        )
+        if not isinstance(selections, dict) or not selections:
+            raise AdminAuthError("validation", "Image selections must be a non-empty object.", 400)
+        if any(key not in allowed_selections for key in selections):
+            raise AdminAuthError("validation", "One or more image destinations are invalid.", 400)
+        if any(not isinstance(value, bool) for value in selections.values()):
+            raise AdminAuthError("validation", "Image selections must be boolean.", 400)
+        patch.update(selections)
     if not patch:
         raise AdminAuthError("validation", "No image changes were supplied.", 400)
     image = await patch_image(db, category, image_id, patch)
