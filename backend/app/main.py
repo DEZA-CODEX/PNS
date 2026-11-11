@@ -19,6 +19,7 @@ from app.api.diagnostics import DIAGNOSTICS_DASHBOARD
 from app.api.diagnostics import router as diagnostics_router
 from app.api.v1.router import router as v1_router
 from app.core.config import get_settings
+from app.core.cache import close_redis
 from app.core.database import close_database, get_engine
 from app.core.exceptions import APIError
 from app.core.rate_limit import login_rate_limiter
@@ -53,6 +54,7 @@ async def lifespan(_: FastAPI):
             logger.info("PostgreSQL connection pool is ready.")
     yield
     await login_rate_limiter.close()
+    await close_redis()
     await close_database()
 
 

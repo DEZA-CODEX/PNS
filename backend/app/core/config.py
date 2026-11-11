@@ -69,6 +69,15 @@ class Settings(BaseSettings):
         le=30,
     )
     redis_url: str | None = Field(default=None, validation_alias="REDIS_URL")
+    upstash_redis_rest_url: str | None = Field(
+        default=None, validation_alias="UPSTASH_REDIS_REST_URL"
+    )
+    upstash_redis_rest_token: str | None = Field(
+        default=None, validation_alias="UPSTASH_REDIS_REST_TOKEN"
+    )
+    redis_key_prefix: str = Field(default="pns:backend:", validation_alias="REDIS_KEY_PREFIX")
+    redis_default_ttl: int = Field(default=60, validation_alias="REDIS_DEFAULT_TTL", gt=0)
+    redis_enabled: bool = Field(default=True, validation_alias="REDIS_ENABLED")
     image_storage_dir: str = Field(
         default="../public/uploads", validation_alias="PNS_IMAGE_STORAGE_DIR"
     )

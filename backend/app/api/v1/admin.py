@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.datastructures import UploadFile
 
 from app.core.config import get_settings
+from app.core.cache import invalidate_image_caches
 from app.core.database import get_db_session
 from app.core.dependencies import AdminContext, require_permission
 from app.core.exceptions import AdminAuthError, APIError, ImageManagementError
@@ -729,6 +730,7 @@ async def _upload_files(
                 {"sourceType": "upload"},
             )
             await db.commit()
+            await invalidate_image_caches()
         except Exception:
             if image.get("path"):
                 try:
@@ -806,6 +808,7 @@ async def _upload_files(
             {"files": len(results), "success": processed, "failed": failed},
         )
         await db.commit()
+        await invalidate_image_caches()
     except Exception:
         for result in results:
             if result["success"] and result["path"]:
@@ -861,6 +864,7 @@ def _image_router(collection: str) -> None:
             _request_id(request),
         )
         await db.commit()
+        await invalidate_image_caches()
         return JSONResponse(
             {
                 "success": True,
@@ -930,6 +934,7 @@ def _image_router(collection: str) -> None:
             {"sourceType": "external"},
         )
         await db.commit()
+        await invalidate_image_caches()
         return JSONResponse(
             {
                 "success": True,
@@ -963,6 +968,7 @@ def _image_router(collection: str) -> None:
                 _request_id(request),
             )
             await db.commit()
+            await invalidate_image_caches()
         except Exception:
             if storage_cleanup and storage_cleanup.get("backup") is not None:
                 try:
@@ -1069,6 +1075,7 @@ async def patch_managed_image(
         {"fields": list(patch)},
     )
     await db.commit()
+    await invalidate_image_caches()
     return JSONResponse(
         {"success": True, "image": image, "requestId": _request_id(request)}
     )

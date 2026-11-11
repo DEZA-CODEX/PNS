@@ -12,4 +12,4 @@ bcrypt>=4.2,<6
 Pillow>=11.1,<13
 pillow-avif-plugin>=1.5,<2
 httpx>=0.28,<1
-redis>=5,<7
+upstash-redis>=1,<2
