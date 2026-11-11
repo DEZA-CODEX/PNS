@@ -68,7 +68,10 @@ class Settings(BaseSettings):
         gt=0,
         le=30,
     )
-    redis_url: str | None = Field(default=None, validation_alias="REDIS_URL")
+    redis_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("CELERY_BROKER_URL", "REDIS_URL"),
+    )
     upstash_redis_rest_url: str | None = Field(
         default=None, validation_alias="UPSTASH_REDIS_REST_URL"
     )
@@ -78,6 +81,27 @@ class Settings(BaseSettings):
     redis_key_prefix: str = Field(default="pns:backend:", validation_alias="REDIS_KEY_PREFIX")
     redis_default_ttl: int = Field(default=60, validation_alias="REDIS_DEFAULT_TTL", gt=0)
     redis_enabled: bool = Field(default=True, validation_alias="REDIS_ENABLED")
+    redis_timeout_seconds: float = Field(
+        default=2.5, validation_alias="PNS_REDIS_TIMEOUT_SECONDS", gt=0, le=10
+    )
+    image_cache_ttl_seconds: int = Field(
+        default=300, validation_alias="PNS_IMAGE_CACHE_TTL_SECONDS", gt=0
+    )
+    celery_task_time_limit_seconds: int = Field(
+        default=900, validation_alias="PNS_CELERY_TASK_TIME_LIMIT_SECONDS", gt=0
+    )
+    celery_job_dispatch_interval_seconds: int = Field(
+        default=30, validation_alias="PNS_CELERY_JOB_DISPATCH_INTERVAL_SECONDS", ge=10
+    )
+    celery_job_cleanup_hour: int = Field(
+        default=3, validation_alias="PNS_CELERY_JOB_CLEANUP_HOUR", ge=0, le=23
+    )
+    celery_job_cleanup_minute: int = Field(
+        default=15, validation_alias="PNS_CELERY_JOB_CLEANUP_MINUTE", ge=0, le=59
+    )
+    background_job_retention_days: int = Field(
+        default=30, validation_alias="PNS_BACKGROUND_JOB_RETENTION_DAYS", gt=0
+    )
     image_storage_dir: str = Field(
         default="../public/uploads", validation_alias="PNS_IMAGE_STORAGE_DIR"
     )

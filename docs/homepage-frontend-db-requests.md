@@ -12,33 +12,31 @@ The homepage is assembled in [`src/home/Home.tsx`](../src/home/Home.tsx). Its se
 
 [`RoomsPreview`](../src/home/components/Rooms/RoomsPreview.tsx) calls `useRoomImages("homepage")`.
 
-The repository requests one endpoint for each room type:
+It requests the consolidated homepage endpoint:
 
 ```text
-GET /api/v1/images/room?type=vajra
-GET /api/v1/images/room?type=garuda
-GET /api/v1/images/room?type=arohana
-GET /api/v1/images/room?type=madhurya
-GET /api/v1/images/room?type=maayukha
+GET /api/v1/images/homepage
 ```
 
-[`GalleryPreview`](../src/home/components/Gallery/GalleryPreview.tsx) also calls `useRoomImages("gallery")`, which repeats the same five category requests. Therefore, the current initial homepage load makes **10 room image API requests**.
+[`GalleryPreview`](../src/home/components/Gallery/GalleryPreview.tsx) calls `useRoomImages("gallery")` and requests the consolidated room-section endpoint:
+
+```text
+GET /api/v1/images/rooms
+```
+
+The repository coalesces concurrent calls to the same endpoint and caches the result in memory for up to 14 seconds.
 
 ### Managed dining images
 
 [`DiningPreview`](../src/home/components/Dining/DiningPreview.tsx) calls `useDiningImageLibrary`, and [`GalleryPreview`](../src/home/components/Gallery/GalleryPreview.tsx) calls `useDiningImages("gallery")`.
 
-Each repository load requests all three dining types:
+Both consumers use one consolidated endpoint:
 
 ```text
-GET /api/v1/images/dining?type=vrindavan
-GET /api/v1/images/dining?type=cloud9
-GET /api/v1/images/dining?type=clinq
+GET /api/v1/images/dining
 ```
 
-Both homepage consumers load independently, so the current initial homepage load makes **6 dining image API requests**.
-
-The request fan-out is implemented in [`src/services/roomImageRepository.ts`](../src/services/roomImageRepository.ts), and the shared HTTP client is [`src/lib/api-client.ts`](../src/lib/api-client.ts).
+Concurrent calls share one in-flight request. Successful responses for each endpoint are cached in memory for up to 14 seconds. Cache invalidation on focus and managed-image changes remains in the hooks.
 
 ### Image content requests
 
@@ -62,67 +60,24 @@ The homepage does not currently send database/API requests for:
 - Booking availability. The booking form only opens the client-side [`BookingPanel`](../src/components/BookingPanel.tsx); it does not submit to an API.
 - Contact/map content. Phone, email, address, and links are static; the map iframe loads only after the user clicks “Load interactive map.”
 
-## Database queries per image API request
+## Database queries
 
-The endpoint is defined in [`backend/app/api/v1/images.py`](../backend/app/api/v1/images.py), and the SQL is in [`backend/app/repositories/image_repository.py`](../backend/app/repositories/image_repository.py).
+The homepage and room/dining section endpoints are defined in [`backend/app/api/v1/API/homepage.py`](../backend/app/api/v1/API/homepage.py), [`backend/app/api/v1/rooms.py`](../backend/app/api/v1/rooms.py), and [`backend/app/api/v1/dining.py`](../backend/app/api/v1/dining.py). The SQL is in [`backend/app/repositories/image_repository.py`](../backend/app/repositories/image_repository.py).
 
-For each request such as `GET /api/v1/images/room?type=vajra`, the backend executes two queries against `public.managed_images`.
+Each consolidated endpoint loads active image metadata and disabled bundled-image overrides using two SQL queries on a Redis cache miss. Room and dining section endpoints batch all of their categories instead of querying each category separately. The homepage endpoint batches room and dining metadata together; hero selection is still not database-driven.
 
-### 1. Active images for the requested category
-
-```sql
-SELECT id,
-       category_id,
-       public_url,
-       storage_path,
-       source_type,
-       image_data IS NOT NULL AS has_database_content,
-       display_location,
-       display_order,
-       is_active,
-       updated_at
-FROM public.managed_images
-WHERE category_type = :collection
-  AND category_id = :category
-  AND is_active
-ORDER BY display_order, created_at;
-```
-
-Parameters:
-
-```text
-:collection = room or dining
-:category  = vajra, garuda, arohana, madhurya, maayukha,
-             vrindavan, cloud9, or clinq
-```
-
-The homepage currently does not pass the optional `location` query parameter, so this query is not filtered by `display_location`.
-
-### 2. Disabled bundled-image overrides
-
-```sql
-SELECT legacy_id
-FROM public.managed_images
-WHERE category_type = :collection
-  AND category_id = :category
-  AND source_type = 'bundled'
-  AND NOT is_active
-  AND legacy_id IS NOT NULL;
-```
-
-The frontend uses these IDs to remove disabled bundled assets from its local image manifest.
+The category-specific API in [`backend/app/api/v1/images.py`](../backend/app/api/v1/images.py) remains available for clients that need it. Its responses are cached by collection, category, and display location; each cold key uses two queries.
 
 ## Current initial-load totals
 
 | Resource | API requests | SQL queries |
 |---|---:|---:|
-| Room images for Rooms preview | 5 | 10 |
-| Room images for Gallery preview | 5 | 10 |
-| Dining images for Dining preview | 3 | 6 |
-| Dining images for Gallery preview | 3 | 6 |
-| **Total** | **16** | **32** |
+| Room preview (`/images/homepage`) | 1 | 2 on a cold Redis key |
+| Room gallery (`/images/rooms`) | 1 | 2 on a cold Redis key |
+| Dining preview and gallery (`/images/dining`) | 1 shared | 2 on a cold Redis key |
+| **Total** | **3** | **6 on cold keys; 0 on Redis hits** |
 
-These totals apply to one homepage mount before the 15-second refresh timer, window-focus refreshes, or managed-image change events trigger additional loads. The refresh behavior is defined in [`src/hooks/useRoomImages.ts`](../src/hooks/useRoomImages.ts) and [`src/hooks/useDiningImages.ts`](../src/hooks/useDiningImages.ts).
+These are request/query counts from the current client and backend code, not latency measurements. The browser-side response cache lasts up to 14 seconds; the Redis cache defaults to 300 seconds. Hooks refresh every 15 seconds and invalidate their endpoint cache on focus or managed-image changes. The hooks are [`src/hooks/useRoomImages.ts`](../src/hooks/useRoomImages.ts) and [`src/hooks/useDiningImages.ts`](../src/hooks/useDiningImages.ts).
 
 ## Database schema and index
 

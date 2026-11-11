@@ -10,6 +10,7 @@ import {
   Gauge,
   Home,
   Image as ImageIcon,
+  ListChecks,
   LogOut,
   MapPinned,
   MessageSquareText,
@@ -35,6 +36,7 @@ import {
 } from "recharts";
 import { useState } from "react";
 import { AdminAccessManagement } from "@/admin/AdminAccessManagement";
+import { AdminBackgroundJobs } from "@/admin/AdminBackgroundJobs";
 import { DiningImageManagement } from "@/admin/DiningImageManagement";
 import { RoomImageManagement } from "@/admin/RoomImageManagement";
 import { authService } from "@/admin/auth/services/authService";
@@ -49,6 +51,7 @@ const navSections = [
   ["Room Image Management", ImageIcon],
   ["Dining Image Management", Utensils],
   ["Users and Groups", Users],
+  ["Background Jobs", ListChecks],
   ["Guest Reviews", Star],
   ["Website Content", FileTextIcon],
   ["Settings", Settings],
@@ -169,7 +172,9 @@ export function AdminPanel({
                     ? permissions.includes("dining_images.read")
                     : label === "Users and Groups"
                       ? permissions.includes("users.read") || permissions.includes("groups.read")
-                      : true,
+                      : label === "Background Jobs"
+                        ? permissions.includes("jobs.read")
+                        : true,
               )
               .map(([label, Icon]) => (
                 <button
@@ -180,6 +185,7 @@ export function AdminPanel({
                       label === "Dashboard" ||
                       label === "Room Image Management" ||
                       label === "Dining Image Management" ||
+                      (label === "Background Jobs" && permissions.includes("jobs.read")) ||
                       (label === "Users and Groups" && permissions.includes("users.read"))
                     ) {
                       setActiveSection(label);
@@ -245,6 +251,9 @@ export function AdminPanel({
               permissions={permissions}
               currentUserRole={currentUser.roleName}
             />
+          ) : null}
+          {activeSection === "Background Jobs" && permissions.includes("jobs.read") ? (
+            <AdminBackgroundJobs canCreate={permissions.includes("jobs.create")} />
           ) : null}
           {activeSection === "Dashboard" ? (
             <div>

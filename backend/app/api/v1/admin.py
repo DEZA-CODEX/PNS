@@ -730,7 +730,7 @@ async def _upload_files(
                 {"sourceType": "upload"},
             )
             await db.commit()
-            await invalidate_image_caches()
+            await invalidate_image_caches(collection, category)
         except Exception:
             if image.get("path"):
                 try:
@@ -808,7 +808,7 @@ async def _upload_files(
             {"files": len(results), "success": processed, "failed": failed},
         )
         await db.commit()
-        await invalidate_image_caches()
+        await invalidate_image_caches(collection, category)
     except Exception:
         for result in results:
             if result["success"] and result["path"]:
@@ -864,7 +864,6 @@ def _image_router(collection: str) -> None:
             _request_id(request),
         )
         await db.commit()
-        await invalidate_image_caches()
         return JSONResponse(
             {
                 "success": True,
@@ -934,7 +933,7 @@ def _image_router(collection: str) -> None:
             {"sourceType": "external"},
         )
         await db.commit()
-        await invalidate_image_caches()
+        await invalidate_image_caches(collection, body_category.strip())
         return JSONResponse(
             {
                 "success": True,
@@ -968,7 +967,7 @@ def _image_router(collection: str) -> None:
                 _request_id(request),
             )
             await db.commit()
-            await invalidate_image_caches()
+            await invalidate_image_caches(collection, category)
         except Exception:
             if storage_cleanup and storage_cleanup.get("backup") is not None:
                 try:
@@ -1075,7 +1074,7 @@ async def patch_managed_image(
         {"fields": list(patch)},
     )
     await db.commit()
-    await invalidate_image_caches()
+    await invalidate_image_caches(category, str(image.get("category") or ""))
     return JSONResponse(
         {"success": True, "image": image, "requestId": _request_id(request)}
     )

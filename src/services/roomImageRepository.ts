@@ -47,15 +47,17 @@ type HomepageImagePayload = {
   disabledBundledIds?: Partial<Record<"room" | "dining" | "hero", Record<string, string[]>>>;
 };
 
-let homepageCache: HomepageImagePayload | null = null;
-let homepageCacheAt = 0;
-let homepageRequest: Promise<HomepageImagePayload> | null = null;
+const IMAGE_PAYLOAD_CACHE_TTL_MS = 14_000;
+const imagePayloadCache = new Map<string, { payload: HomepageImagePayload; cachedAt: number }>();
+const imagePayloadRequests = new Map<string, Promise<HomepageImagePayload>>();
 
 async function getImagePayload(endpoint: string, collection: "room" | "dining") {
-  if (endpoint === "/images/homepage") {
-    if (homepageCache && Date.now() - homepageCacheAt < 15_000) return homepageCache;
-    if (homepageRequest) return homepageRequest;
+  const cached = imagePayloadCache.get(endpoint);
+  if (cached && Date.now() - cached.cachedAt < IMAGE_PAYLOAD_CACHE_TTL_MS) {
+    return cached.payload;
   }
+  const inFlight = imagePayloadRequests.get(endpoint);
+  if (inFlight) return inFlight;
 
   const request = apiFetch(endpoint).then(async (response) => {
     if (!response.ok) {
@@ -75,17 +77,16 @@ async function getImagePayload(endpoint: string, collection: "room" | "dining") 
     return payload;
   });
 
-  if (endpoint !== "/images/homepage") return request;
-  homepageRequest = request
+  const sharedRequest = request
     .then((payload) => {
-      homepageCache = payload;
-      homepageCacheAt = Date.now();
+      imagePayloadCache.set(endpoint, { payload, cachedAt: Date.now() });
       return payload;
     })
     .finally(() => {
-      homepageRequest = null;
+      imagePayloadRequests.delete(endpoint);
     });
-  return homepageRequest;
+  imagePayloadRequests.set(endpoint, sharedRequest);
+  return sharedRequest;
 }
 
 async function patchManagedImage(
@@ -111,13 +112,14 @@ async function getHomepageImages(): Promise<HomepageImagePayload> {
 }
 
 export function refreshHomepageImages() {
-  homepageCache = null;
-  homepageCacheAt = 0;
+  imagePayloadCache.delete("/images/homepage");
   return getHomepageImages();
 }
 
 export function refreshSectionImages(collection: "room" | "dining") {
-  return getImagePayload(`/images/${collection === "room" ? "rooms" : "dining"}`, collection);
+  const endpoint = `/images/${collection === "room" ? "rooms" : "dining"}`;
+  imagePayloadCache.delete(endpoint);
+  return getImagePayload(endpoint, collection);
 }
 
 function createLoadResult(): RoomImageLoadResult {

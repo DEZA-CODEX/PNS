@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any, Awaitable, Callable, TypeVar
 
+import httpx
 from upstash_redis import AsyncRedis
 from upstash_redis.errors import UpstashError
 
@@ -17,6 +19,9 @@ IMAGE_CACHE_PATTERNS = (
     "images:homepage*",
     "images:rooms*",
     "images:dining*",
+    "images:about*",
+    "images:room:*",
+    "images:dining:*",
 )
 
 _redis: AsyncRedis | None = None
@@ -54,8 +59,11 @@ async def _redis_call(
     if client is None:
         return fallback
     try:
-        return await callback(client)
-    except (UpstashError, OSError, TimeoutError):
+        return await asyncio.wait_for(
+            callback(client),
+            timeout=get_settings().redis_timeout_seconds,
+        )
+    except (UpstashError, httpx.HTTPError, OSError, TimeoutError):
         logger.warning("Redis %s failed; continuing without cache.", operation, exc_info=True)
         return fallback
 
@@ -128,13 +136,33 @@ async def set_json(
     await set(key, encoded, ttl_seconds)
 
 
-async def invalidate_image_caches() -> None:
-    for pattern in IMAGE_CACHE_PATTERNS:
+async def invalidate_image_caches(
+    collection: str | None = None,
+    category: str | None = None,
+) -> None:
+    if collection is None:
+        patterns = IMAGE_CACHE_PATTERNS
+    elif collection == "room":
+        patterns = (
+            "images:homepage*",
+            "images:rooms*",
+            f"images:room:{category}:*" if category else "images:room:*",
+        )
+    elif collection == "dining":
+        patterns = (
+            "images:homepage*",
+            "images:dining*",
+            "images:about*",
+            f"images:dining:{category}:*" if category else "images:dining:*",
+        )
+    else:
+        raise ValueError(f"Unsupported image cache collection: {collection}")
+    for pattern in patterns:
         await invalidate_pattern(pattern)
 
 
 async def close_redis() -> None:
     global _redis
     if _redis is not None:
-        _redis.close()
+        await _redis.close()
         _redis = None

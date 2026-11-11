@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.admin import router as admin_router
+from app.api.v1.admin_jobs import router as admin_jobs_router
 from app.api.v1.about import router as about_router
 from app.api.v1.banquet import router as banquet_router
 from app.api.v1.contact import router as contact_router
@@ -12,6 +13,7 @@ from app.api.v1.userpage import router as userpage_router
 
 router = APIRouter()
 router.include_router(admin_router, prefix="/admin", tags=["admin"])
+router.include_router(admin_jobs_router, prefix="/admin/jobs", tags=["admin", "jobs"])
 router.include_router(about_router, tags=["images"])
 router.include_router(banquet_router, tags=["banquet"])
 router.include_router(contact_router, tags=["contact"])

@@ -1,0 +1,60 @@
+services:
+  - type: worker
+    name: pns-celery-worker
+    runtime: python
+    plan: starter
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A app.celery_app:celery_app worker --loglevel=INFO --concurrency=1 --queues=pns-default,pns-maintenance
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: CELERY_BROKER_URL
+        sync: false
+      - key: REDIS_KEY_PREFIX
+        value: "pns:backend:"
+      - key: PNS_CELERY_TASK_TIME_LIMIT_SECONDS
+        value: "900"
+      - key: PNS_CELERY_JOB_DISPATCH_INTERVAL_SECONDS
+        value: "30"
+      - key: PNS_CELERY_JOB_CLEANUP_HOUR
+        value: "3"
+      - key: PNS_CELERY_JOB_CLEANUP_MINUTE
+        value: "15"
+      - key: PNS_BACKGROUND_JOB_RETENTION_DAYS
+        value: "30"
+
+  - type: worker
+    name: pns-celery-beat
+    runtime: python
+    plan: starter
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A app.celery_app:celery_app beat --loglevel=INFO --schedule=/var/data/celerybeat-schedule
+    disk:
+      name: pns-celerybeat-schedule
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: CELERY_BROKER_URL
+        sync: false
+      - key: REDIS_KEY_PREFIX
+        value: "pns:backend:"
+      - key: PNS_CELERY_JOB_DISPATCH_INTERVAL_SECONDS
+        value: "30"
+      - key: PNS_CELERY_JOB_CLEANUP_HOUR
+        value: "3"
+      - key: PNS_CELERY_JOB_CLEANUP_MINUTE
+        value: "15"
+      - key: PNS_BACKGROUND_JOB_RETENTION_DAYS
+        value: "30"
