@@ -17,7 +17,7 @@ export function Hero({ ready, onBook }: { ready: boolean; onBook: () => void }) 
       setCardIndex((index) => (index + 1) % cardSlides.length);
     }, 4200);
     return () => window.clearInterval(id);
-  }, []);
+  }, [cardSlides.length]);
 
   useEffect(() => {
     if (!ready || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -131,7 +131,8 @@ export function Hero({ ready, onBook }: { ready: boolean; onBook: () => void }) 
                   alt={slide.alt}
                   width={912}
                   height={1408}
-                  loading="eager"
+                  loading={i === 0 ? "eager" : "lazy"}
+                  fetchPriority={i === 0 ? "high" : "auto"}
                   className={`absolute inset-0 size-full object-cover transition-all duration-[1500ms] ease-out ${
                     i === cardIndex
                       ? "opacity-100 scale-100 [clip-path:inset(0_0_0_0)]"

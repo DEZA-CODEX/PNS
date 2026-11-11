@@ -1,6 +1,9 @@
 fastapi>=0.115,<1
 uvicorn[standard]>=0.34,<1
 SQLAlchemy[asyncio]>=2.0,<3
+# Build SQLAlchemy from its pure-Python source package; some Windows hosts block
+# the compiled .pyd extensions shipped in the wheel.
+--no-binary=SQLAlchemy
 asyncpg>=0.30,<1
 python-multipart>=0.0.20,<1
 python-dotenv>=1.0,<2
@@ -9,4 +12,4 @@ bcrypt>=4.2,<6
 Pillow>=11.1,<13
 pillow-avif-plugin>=1.5,<2
 httpx>=0.28,<1
-redis>=5,<7
+upstash-redis>=1,<2

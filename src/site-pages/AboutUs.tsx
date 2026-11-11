@@ -23,7 +23,7 @@ import { BookingPanel } from "@/components/BookingPanel";
 import { Cursor } from "@/components/Cursor";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/sections/Footer";
-import heroHotel from "@/assets/hero-bg/hero-hotel.jpg";
+import { heroHotelImage } from "@/data/imageManifest";
 import roomPremier from "@/assets/room-premier.jpg";
 import roomSuite from "@/assets/room-suite.jpg";
 import diningCloud9 from "@/assets/dining-cloud9.jpg";
@@ -46,7 +46,7 @@ const facilities = [
   ["TVASISTA", "Kitty Party Room", eventsBanquet.src],
   ["TAMARA", "Pillarless Banquet / Party Hall", eventsBanquet.src],
   ["TITIKSHA", "Board Room", eventsBanquet.src],
-  ["TRAVEL DESK", "Pickup & Drop, Vehicle on Rent", heroHotel.src],
+  ["TRAVEL DESK", "Pickup & Drop, Vehicle on Rent", heroHotelImage.src],
 ] as const;
 
 const amenities = [
@@ -68,7 +68,7 @@ const attractions = [
   [
     "VELLORE FORT",
     "Built during the Vijayanagar period, Vellore Fort is known for its massive ramparts, historic architecture and intricate details.",
-    heroHotel.src,
+    heroHotelImage.src,
   ],
   [
     "SRI LAXMI NARAYANI GOLDEN TEMPLE",
@@ -83,7 +83,7 @@ const attractions = [
   [
     "AMIRTHI ZOOLOGICAL PARK",
     "Located around 25 kilometres from Vellore, Amirthi Zoological Park offers a refreshing escape into nature.",
-    heroHotel.src,
+    heroHotelImage.src,
   ],
   [
     "JALAKANDESWARAR TEMPLE",
@@ -220,7 +220,11 @@ export function AboutUs() {
             </div>
           </div>
           <div className="about-image-strip">
-            <img src={heroHotel.src} alt="Hotel PNS Nakshatra illuminated facade" loading="lazy" />
+            <img
+              src={heroHotelImage.src}
+              alt="Hotel PNS Nakshatra illuminated facade"
+              loading="lazy"
+            />
             <div>
               <span className="eyebrow">Vellore · Tamil Nadu</span>
               <p className="mt-2 font-display text-3xl text-cream">

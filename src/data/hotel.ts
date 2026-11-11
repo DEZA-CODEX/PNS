@@ -34,20 +34,20 @@ export const rooms = [
 
 export const dining = [
   {
-    id: "cloud9",
-    name: "Cloud 9",
-    tag: "Rooftop Dining",
-    line: "Dine above the city",
-    detail:
-      "Vellore's skyline unfolds beneath open-air tables, string lights and a menu that moves from grill to global.",
-  },
-  {
     id: "vrindavan",
     name: "Vrindavan",
     tag: "Pure Vegetarian",
     line: "The taste of tradition",
     detail:
       "South Indian classics and North Indian thalis served in brass, from early filter coffee to late dinner.",
+  },
+  {
+    id: "cloud9",
+    name: "Cloud 9",
+    tag: "Rooftop Dining",
+    line: "Dine above the city",
+    detail:
+      "Vellore's skyline unfolds beneath open-air tables, string lights and a menu that moves from grill to global.",
   },
   {
     id: "clinq",

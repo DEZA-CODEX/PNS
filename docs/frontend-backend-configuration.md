@@ -24,6 +24,11 @@ values must never be copied into the frontend environment.
 | `PNS_COOKIE_DOMAIN`        | FastAPI      | Optional cookie domain, e.g. a shared parent domain for frontend/API subdomains.                         |
 | `PNS_SESSION_DURATION_MINUTES` | FastAPI  | Admin session lifetime in minutes; defaults to `480` (8 hours).                                          |
 | `PNS_REMEMBERED_SESSION_DURATION_MINUTES` | FastAPI | Admin “Remember me” lifetime in minutes; defaults to `43200` (30 days).                    |
+| `UPSTASH_REDIS_REST_URL` | FastAPI or Next.js server | Upstash REST endpoint; keep it server-only. |
+| `UPSTASH_REDIS_REST_TOKEN` | FastAPI or Next.js server | Upstash REST token; never expose it to browser code. |
+| `REDIS_KEY_PREFIX` | FastAPI or Next.js server | Namespace prefix; use `pns:backend:` for FastAPI and `pns:frontend:` for Next.js. |
+| `REDIS_DEFAULT_TTL` | FastAPI or Next.js server | Default cache lifetime in seconds; defaults to `60`. |
+| `REDIS_ENABLED` | FastAPI or Next.js server | Set to `true` to enable Redis, or `false` for normal API/database fallback. |
 
 `NEXT_PUBLIC_API_BASE_URL` is public and is compiled into the Next.js build. Do not put database
 URLs, service-role keys, or any secret in a `NEXT_PUBLIC_*` variable.
@@ -82,10 +87,14 @@ PNS_SECURE_COOKIES=true
 PNS_COOKIE_SAMESITE=none
 PNS_SESSION_DURATION_MINUTES=480
 PNS_REMEMBERED_SESSION_DURATION_MINUTES=43200
+UPSTASH_REDIS_REST_URL=https://your-instance.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your-backend-only-token
+REDIS_KEY_PREFIX=pns:backend:
+REDIS_DEFAULT_TTL=60
+REDIS_ENABLED=true
 ```
 
-Keep the real database URL only in the backend environment. Set `REDIS_URL` only when a shared
-Redis service is configured. `CORS_ORIGINS` accepts comma-separated exact origins (scheme and
+Keep the real database URL only in the backend environment. `CORS_ORIGINS` accepts comma-separated exact origins (scheme and
 optional port, no path); `PNS_ALLOWED_HOSTS` accepts comma-separated hostnames only. Neither
 setting accepts wildcards. Do not use `0.0.0.0` as an allowed public host.
 Create or select the intended bucket in the Supabase project before enabling uploads; the backend
@@ -95,6 +104,23 @@ backend key, while public buckets return verified Supabase public URLs. Objects 
 existing `uploads/room/<category>/...` and `uploads/dining/<category>/...` paths. Check the bucket's
 actual access setting before setting `SUPABASE_STORAGE_PUBLIC=true`; no bucket is declared by
 this repository.
+
+When server-side Next.js pages or route handlers need cached API data, configure these variables
+independently in the frontend Vercel project:
+
+```dotenv
+UPSTASH_REDIS_REST_URL=https://your-instance.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your-frontend-only-token
+REDIS_KEY_PREFIX=pns:frontend:
+REDIS_DEFAULT_TTL=60
+REDIS_ENABLED=true
+```
+
+The frontend Redis helper is server-only and is not imported by Client Components. Browser
+requests for dynamic admin-managed image metadata continue to call FastAPI directly; those
+records are cached in the backend namespace. Hero images remain bundled in the code manifest and
+never use Redis or the database. Redis stores metadata only, not Supabase Storage image binaries
+or admin sessions. Cache failures fail open to the normal API/database path.
 
 The configured Supabase project was inspected and contains an existing public `pns-images` bucket.
 The local `backend/.env` uses `SUPABASE_STORAGE_BUCKET=pns-images` and

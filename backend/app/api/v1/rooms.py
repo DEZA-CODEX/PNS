@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
+from app.core.cache import get_json, set_json
 from app.core.responses import JSONResponse
 from app.services.image_service import list_section_images
 
@@ -26,7 +27,11 @@ async def rooms(
             {"success": False, "error": {"code": "invalid_category", "message": "Unknown room category."}},
             status_code=400,
         )
-    payload = await list_section_images(db, "room", ROOM_CATEGORIES)
+    cache_key = "images:rooms"
+    payload = await get_json(cache_key)
+    if payload is None:
+        payload = await list_section_images(db, "room", ROOM_CATEGORIES)
+        await set_json(cache_key, payload)
     if category:
         payload["images"] = {category: payload["images"].get(category, [])}
         payload["disabledBundledIds"] = {category: payload["disabledBundledIds"].get(category, [])}

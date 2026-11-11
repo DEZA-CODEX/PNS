@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
+from app.core.cache import get_json, set_json
 from app.core.responses import JSONResponse
 from app.services.image_service import list_section_images
 
@@ -45,7 +46,18 @@ async def dining(
             {"success": False, "error": {"code": "invalid_category", "message": "Unknown dining category."}},
             status_code=400,
         )
+    cache_key = "images:dining"
+    payload = await get_json(cache_key)
+    if payload is None:
+        payload = await _dining_payload(db, None)
+        await set_json(cache_key, payload)
+    if category:
+        payload = {
+            **payload,
+            "images": {category: payload["images"].get(category, [])},
+            "disabledBundledIds": {category: payload["disabledBundledIds"].get(category, [])},
+        }
     return JSONResponse(
-        {"success": True, "requestId": getattr(request.state, "request_id", "unknown"), **await _dining_payload(db, category)},
+        {"success": True, "requestId": getattr(request.state, "request_id", "unknown"), **payload},
         headers={"Cache-Control": "no-store"},
     )
