@@ -56,7 +56,9 @@ The homepage does not currently send database/API requests for:
 
 - Room names, descriptions, amenities, or prices. These come from [`src/data/rooms.ts`](../src/data/rooms.ts).
 - Dining names and descriptions. These come from [`src/data/hotel.ts`](../src/data/hotel.ts).
-- Hero, hotel, banquet, and experience content. These are bundled assets/static data.
+- Hero images. Homepage hero background and container slides come exclusively from the code-based
+  [`src/data/imageManifest.ts`](../src/data/imageManifest.ts); they do not call the managed-image
+  homepage endpoint. Hotel, banquet, and experience content are also bundled assets/static data.
 - Booking availability. The booking form only opens the client-side [`BookingPanel`](../src/components/BookingPanel.tsx); it does not submit to an API.
 - Contact/map content. Phone, email, address, and links are static; the map iframe loads only after the user clicks “Load interactive map.”
 

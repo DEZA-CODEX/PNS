@@ -34,6 +34,31 @@ const roomLinks = roomCategories.map((room) => ({
   description: room.category,
 }));
 
+const banquetLinks = [
+  {
+    label: "Weddings & receptions",
+    href: "/banquet#enquire",
+    description: "Memorable celebrations",
+  },
+  {
+    label: "Engagements & anniversaries",
+    href: "/banquet#enquire",
+    description: "Special occasions",
+  },
+  { label: "Birthday celebrations", href: "/banquet#enquire", description: "Celebrate together" },
+  {
+    label: "Family & private functions",
+    href: "/banquet#enquire",
+    description: "Gather beautifully",
+  },
+  { label: "Corporate meetings", href: "/banquet#enquire", description: "Professional events" },
+  {
+    label: "Business events & launches",
+    href: "/banquet#enquire",
+    description: "Bring ideas to life",
+  },
+];
+
 export function Navbar({ onBook }: { onBook: () => void }) {
   const [solid, setSolid] = useState(false);
   const [open, setOpen] = useState(false);
@@ -143,6 +168,21 @@ export function Navbar({ onBook }: { onBook: () => void }) {
                       </a>
                     ))}
                   </div>
+                ) : l.label === "Banquet" ? (
+                  <div className="pointer-events-none absolute left-1/2 top-full z-[70] mt-0 w-64 -translate-x-1/2 translate-y-2 border border-gold/40 bg-[var(--color-navy)] p-3 opacity-0 shadow-[var(--shadow-cinema)] transition-all group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100">
+                    {banquetLinks.map((item) => (
+                      <a
+                        key={item.label}
+                        href={item.href}
+                        className="group/dropdown-item block px-3 py-2 text-[calc(0.75rem_+_2px)] font-semibold uppercase tracking-[0.12em] text-[var(--color-ivory)] transition-colors underline-offset-2 decoration-[1px] hover:bg-[color-mix(in_oklab,var(--color-ivory)_10%,transparent)] hover:text-gold hover:underline focus-visible:bg-[color-mix(in_oklab,var(--color-ivory)_10%,transparent)] focus-visible:text-gold"
+                      >
+                        <span className="block">{item.label}</span>
+                        <span className="mt-1 block text-[calc(0.6rem_+_2px)] font-normal tracking-[0.08em] text-[var(--color-ivory)]/70 group-hover/dropdown-item:text-[var(--color-ivory)]">
+                          {item.description}
+                        </span>
+                      </a>
+                    ))}
+                  </div>
                 ) : null}
               </div>
             </li>
@@ -218,6 +258,28 @@ export function Navbar({ onBook }: { onBook: () => void }) {
               </a>
               <div className="mt-3 grid grid-cols-2 gap-2 pl-3">
                 {roomLinks.map((item) => (
+                  <a
+                    key={item.label}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className="eyebrow text-[calc(var(--type-label)_+_2px)] text-[var(--color-navy-soft)] transition-colors hover:text-[var(--color-navy)] hover:underline"
+                  >
+                    {item.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : l.label === "Banquet" ? (
+            <div key={l.href} className="border-b border-gold/20 pb-4">
+              <a
+                href={l.href}
+                className={`eyebrow text-[calc(var(--type-label)_+_2px)] transition-colors hover:text-[#000000] ${pathname === l.href ? "text-[#000000] underline" : ""}`}
+                data-cursor=""
+              >
+                Banquet
+              </a>
+              <div className="mt-3 grid gap-2 pl-3">
+                {banquetLinks.map((item) => (
                   <a
                     key={item.label}
                     href={item.href}

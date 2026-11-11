@@ -20,7 +20,7 @@ export function HeroBackdrop() {
       setActive((index) => (index + 1) % slides.length);
     }, 6000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [slides.length]);
 
   useEffect(() => {
     const el = layer.current;
@@ -45,7 +45,8 @@ export function HeroBackdrop() {
             key={slide.src}
             src={slide.src}
             alt=""
-            loading="eager"
+            loading={i === 0 ? "eager" : "lazy"}
+            fetchPriority={i === 0 ? "high" : "auto"}
             className={`absolute inset-0 size-full object-cover transition-opacity duration-[2200ms] ease-out ${
               i === active ? "opacity-100 animate-ken-burns" : "opacity-0"
             }`}
