@@ -2,7 +2,7 @@
 
 ## Architecture and current task scope
 
-FastAPI and Celery use the same `backend/` Python application. FastAPI runs on Vercel; a Render Background Worker runs Celery independently; a separate Render Background Worker runs the single Celery Beat scheduler. Supabase PostgreSQL remains the source of truth. Upstash is used through its existing REST client for API cache reads/writes and a Redis-protocol URL for Celery.
+FastAPI and Celery use the same `backend/` Python application. FastAPI runs on Vercel; Railway runs Celery independently as a worker service and a separate, single Celery Beat service. Supabase PostgreSQL remains the source of truth. Upstash is used through its existing REST client for API cache reads/writes and a Redis-protocol URL for Celery.
 
 The current verified background task is `cache.invalidate_images`. The application has managed-image data and image cache entries, but no booking, email, report, or other operational data models. Those tasks and materialized-view refreshes are intentionally not scheduled until the corresponding application workflows exist.
 
@@ -46,10 +46,10 @@ The admin UI displays job state and polls every 10 seconds only while there are 
 
 ## Operations and troubleshooting
 
-- Check Render worker and Beat logs for broker or PostgreSQL connectivity errors.
+- Check Railway worker and Beat logs for broker or PostgreSQL connectivity errors.
 - Confirm `CELERY_BROKER_URL` is a Redis-protocol endpoint; the REST URL/token are only for FastAPI's Upstash REST client.
 - Upstash documents native Redis TCP and `BRPOP` support ([command reference](https://upstash.com/docs/redis/commands/list/brpop)), but the complete Celery transport was not tested against this project's Upstash database. Verify the actual broker connection and queue delivery before relying on production dispatch.
-- Confirm the Render service and Supabase project regions and the configured PostgreSQL endpoint. Keep the existing backend endpoint and SSL settings; do not silently substitute a pooler.
+- Confirm the Railway service and Supabase project regions and the configured PostgreSQL endpoint. Keep the existing backend endpoint and SSL settings; do not silently substitute a pooler.
 - `pending` jobs indicate that the database record is durable but broker dispatch has not succeeded. Beat retries the outbox at the configured interval.
 - `retrying` and `failed` records expose a sanitized error class, not exception messages, stack traces, credentials, or SQL.
 - Terminal jobs older than `PNS_BACKGROUND_JOB_RETENTION_DAYS` are removed by the daily cleanup task.

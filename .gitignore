@@ -34,6 +34,8 @@ out
 .env
 .env*
 .vercel
+backend/.txt
+.railway/node_modules/
 
 
 

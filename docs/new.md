@@ -1,4 +1,8 @@
 # MASTER IMPLEMENTATION PROMPT — PNS HOTEL
+## Original Background Processing Brief (Render instructions superseded)
+
+> This document preserves the original implementation brief. Its Render-specific deployment instructions are obsolete. Use [PNS_RAILWAY_DEPLOYMENT.md](./PNS_RAILWAY_DEPLOYMENT.md) for the current Railway worker and Beat setup. `render.yaml` is retained as a legacy configuration and must not be deployed alongside Railway.
+
 ## Complete Background Processing, Redis Caching, Celery, Supabase PostgreSQL Optimization & Render Deployment
 
 Act as a Senior Backend Architect, Python/FastAPI Engineer, Next.js Performance Engineer, PostgreSQL Database Engineer, Redis/Celery Specialist and DevOps Engineer.
@@ -24,8 +28,8 @@ The application currently uses:
 | Database | Supabase PostgreSQL | Supabase |
 | File Storage | Supabase Storage | Supabase |
 | Redis | Upstash Redis | Upstash |
-| Background Worker | Celery | To be deployed on Render |
-| Task Scheduler | Celery Beat | To be deployed on Render |
+| Background Worker | Celery | Railway |
+| Task Scheduler | Celery Beat | Railway |
 | Database Optimization | PostgreSQL Indexes | Supabase PostgreSQL |
 | Precomputed Data | PostgreSQL Materialized Views | Supabase PostgreSQL |
 | Source Control | Existing Git repository | GitHub |
@@ -1071,7 +1075,7 @@ Create or update:
 
 `docs/PNS_DATABASE_OPTIMIZATION.md`
 
-`docs/PNS_RENDER_DEPLOYMENT.md`
+`docs/PNS_RAILWAY_DEPLOYMENT.md`
 
 Document:
 

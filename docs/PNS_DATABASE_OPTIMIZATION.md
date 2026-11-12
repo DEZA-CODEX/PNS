@@ -30,7 +30,7 @@ Or, when applying a reviewed migration directly to an already-migrated project:
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/202611110001_background_jobs.sql
 ```
 
-The worker receives the same `DATABASE_URL` as the backend, preserves its TLS query options, and uses SQLAlchemy's psycopg driver with a conservative one-connection pool. Confirm that the URL is reachable from Render, uses SSL, and is the existing backend endpoint before rollout. No production `EXPLAIN ANALYZE` or live Supabase migration was run.
+The Railway worker receives the same `DATABASE_URL` as the backend, preserves its TLS query options, and uses SQLAlchemy's psycopg driver with a conservative one-connection pool. Confirm that the URL is reachable from Railway, uses SSL, and is the existing backend endpoint before rollout. No production `EXPLAIN ANALYZE` or live Supabase migration was run.
 
 ## Future tuning
 
