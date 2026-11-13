@@ -452,7 +452,16 @@ export function AboutUs() {
       <Footer onBook={openBooking} />
       <BookingPanel
         open={booking}
-        details={{ checkIn: "", checkOut: "", rooms: "1", guests: "1" }}
+        details={{
+          destination: "",
+          checkIn: "",
+          checkOut: "",
+          adults: 2,
+          children: 0,
+          rooms: 1,
+          travelingForWork: false,
+          travelingWithPets: false,
+        }}
         onClose={() => setBooking(false)}
       />
     </>

@@ -63,7 +63,16 @@ export function Gallery() {
   const diningSections = category === "All" || category === "Dining";
   const activeIndex = visibleImages.findIndex((image) => image.id === activeId);
   const activeImage = activeIndex >= 0 ? visibleImages[activeIndex] : null;
-  const bookingDetails: BookingDetails = { checkIn: "", checkOut: "", rooms: "1", guests: "1" };
+  const bookingDetails: BookingDetails = {
+    destination: "",
+    checkIn: "",
+    checkOut: "",
+    adults: 2,
+    children: 0,
+    rooms: 1,
+    travelingForWork: false,
+    travelingWithPets: false,
+  };
 
   const closeLightbox = useCallback(() => setActiveId(null), []);
   const showImage = useCallback(

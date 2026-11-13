@@ -24,10 +24,14 @@ export function Home({ contactOpen = false }: { contactOpen?: boolean }) {
   const [booking, setBooking] = useState(false);
   const [contact, setContact] = useState(contactOpen);
   const [bookingDetails, setBookingDetails] = useState<BookingDetails>({
+    destination: "",
     checkIn: "",
     checkOut: "",
-    rooms: "1",
-    guests: "1",
+    adults: 2,
+    children: 0,
+    rooms: 1,
+    travelingForWork: false,
+    travelingWithPets: false,
   });
   const root = useRef<HTMLElement>(null);
   const openBooking = useCallback((details?: BookingDetails) => {

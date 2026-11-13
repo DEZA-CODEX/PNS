@@ -42,59 +42,41 @@ export function BookingPanel({
         </h2>
         <div className="gold-rule mt-6" />
 
-        <form
-          className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            onClose();
-          }}
+        <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div>
+            <p className="eyebrow">Destination</p>
+            <p className="mt-2 text-cream">{details.destination || "Not selected"}</p>
+          </div>
+          <div>
+            <p className="eyebrow">Dates</p>
+            <p className="mt-2 text-cream">
+              {details.checkIn || "Check-in"} — {details.checkOut || "Check-out"}
+            </p>
+          </div>
+          <div>
+            <p className="eyebrow">Select occupancy</p>
+            <p className="mt-2 text-cream">
+              {details.adults} {details.adults === 1 ? "adult" : "adults"} · {details.children}{" "}
+              {details.children === 1 ? "child" : "children"} · {details.rooms}{" "}
+              {details.rooms === 1 ? "room" : "rooms"}
+            </p>
+          </div>
+          <div>
+            <p className="eyebrow">Preferences</p>
+            <p className="mt-2 text-cream">
+              {details.travelingForWork ? "Business travel" : "Leisure"} ·{" "}
+              {details.travelingWithPets ? "Traveling with pets" : "No pets"}
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="luxury-button luxury-button-hover mt-8 w-full px-8 py-4"
         >
-          <label className="block">
-            <span className="eyebrow">Check in</span>
-            <input
-              type="date"
-              required
-              value={details.checkIn}
-              readOnly
-              className="mt-3 w-full border-b border-input bg-transparent pb-2 text-[length:var(--type-body-small)] text-cream outline-none focus:border-gold"
-            />
-          </label>
-          <label className="block">
-            <span className="eyebrow">Check out</span>
-            <input
-              type="date"
-              required
-              value={details.checkOut}
-              readOnly
-              className="mt-3 w-full border-b border-input bg-transparent pb-2 text-[length:var(--type-body-small)] text-cream outline-none focus:border-gold"
-            />
-          </label>
-          {[
-            { label: "Rooms", options: ["1", "2", "3", "4+"] },
-            { label: "Guests", options: ["1", "2", "3", "4", "5+"] },
-          ].map((f) => (
-            <label key={f.label} className="block">
-              <span className="eyebrow">{f.label}</span>
-              <select
-                value={details[f.label.toLowerCase() as "rooms" | "guests"]}
-                disabled
-                className="mt-3 w-full border-b border-input bg-transparent pb-2 text-[length:var(--type-body-small)] text-cream outline-none focus:border-gold"
-              >
-                {f.options.map((o) => (
-                  <option key={o} value={o} className="bg-card">
-                    {o}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ))}
-          <button
-            type="submit"
-            className="luxury-button luxury-button-hover sm:col-span-2 mt-2 px-8 py-4"
-          >
-            Check availability
-          </button>
-        </form>
+          Check availability
+        </button>
 
         <button onClick={onClose} className="eyebrow mt-6 block hover:text-gold">
           Close

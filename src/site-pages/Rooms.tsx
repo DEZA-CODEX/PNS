@@ -129,10 +129,14 @@ export function Rooms() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [booking, setBooking] = useState(false);
   const [bookingDetails, setBookingDetails] = useState<BookingDetails>({
+    destination: "",
     checkIn: "",
     checkOut: "",
-    rooms: "1",
-    guests: "1",
+    adults: 2,
+    children: 0,
+    rooms: 1,
+    travelingForWork: false,
+    travelingWithPets: false,
   });
   const showcase = useRef<HTMLDivElement>(null);
   const { images } = useRoomImages("roomsPage");
