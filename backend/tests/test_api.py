@@ -15,6 +15,7 @@ from uuid import uuid4
 import httpx
 import pytest
 from fastapi import Request
+from fastapi import UploadFile
 from fastapi.testclient import TestClient
 from PIL import Image
 from pydantic import ValidationError
@@ -988,6 +989,438 @@ def test_uploaded_image_is_saved_to_storage_and_only_metadata_is_saved_in_databa
     assert image["url"].startswith("https://project.supabase.co/storage/")
 
 
+def test_uploaded_image_cleans_its_storage_object_when_metadata_creation_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stored_paths: list[str] = []
+    deleted_paths: list[str] = []
+
+    async def upload_object(path: str, _data: bytes) -> str:
+        stored_paths.append(path)
+        return "https://project.supabase.co/image.webp"
+
+    async def save_image(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise RuntimeError("metadata insert failed")
+
+    async def delete_object(path: str) -> None:
+        deleted_paths.append(path)
+
+    monkeypatch.setattr(image_service, "upload_object", upload_object)
+    monkeypatch.setattr(image_service, "save_managed_image", save_image)
+    monkeypatch.setattr(image_service, "delete_object", delete_object)
+
+    with pytest.raises(RuntimeError, match="metadata insert failed"):
+        asyncio.run(
+            add_uploaded_image(
+                object(), "room", "vajra", "room.png", _image_bytes(), "admin-id"
+            )
+        )
+
+    assert len(stored_paths) == 1
+    assert deleted_paths == stored_paths
+
+
+def test_room_image_upload_returns_success_without_unscoped_cleanup_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1 import admin as admin_api
+
+    class Database:
+        async def commit(self) -> None:
+            return None
+
+        async def rollback(self) -> None:
+            return None
+
+    image = {
+        "id": "room-image-id",
+        "filename": "room.webp",
+        "path": "uploads/room/vajra/room.webp",
+        "url": "https://project.supabase.co/room.webp",
+        "_converted": True,
+    }
+
+    async def add_image(*_args: object) -> dict[str, object]:
+        return image.copy()
+
+    async def audit(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    async def invalidate(*_args: object) -> None:
+        return None
+
+    monkeypatch.setattr(admin_api, "add_uploaded_image", add_image)
+    monkeypatch.setattr(admin_api, "write_audit_event", audit)
+    monkeypatch.setattr(admin_api, "invalidate_image_caches", invalidate)
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/admin/room-images",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "https",
+            "server": ("testserver", 443),
+            "state": {"request_id": "upload-request"},
+        }
+    )
+    actor = AdminContext(
+        user={"id": "admin-id"},
+        permissions=frozenset({"room_images.upload"}),
+        request_id="upload-request",
+    )
+    upload = UploadFile(filename="room.png", file=io.BytesIO(_image_bytes()))
+
+    response = asyncio.run(
+        admin_api._upload_files(
+            request, [upload], "room", "vajra", actor, Database()
+        )
+    )
+
+    payload = json.loads(response.body)
+    assert response.status_code == 201
+    assert payload["image"]["id"] == "room-image-id"
+    assert "_converted" not in payload["image"]
+
+
+def test_dining_batch_upload_preserves_success_when_another_image_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1 import admin as admin_api
+
+    class Database:
+        async def commit(self) -> None:
+            return None
+
+        async def rollback(self) -> None:
+            return None
+
+    async def add_image(
+        _db: object,
+        _collection: str,
+        _category: str,
+        filename: str,
+        _data: bytes,
+        _actor_id: str,
+    ) -> dict[str, object]:
+        if filename == "invalid.png":
+            raise ImageManagementError("invalid_image", "Invalid image.", 400)
+        return {
+            "id": "dining-image-id",
+            "filename": "dining.webp",
+            "path": "uploads/dining/clinq/dining.webp",
+            "url": "https://project.supabase.co/dining.webp",
+            "_converted": True,
+        }
+
+    audit_events: list[tuple[object, ...]] = []
+
+    async def audit(*args: object, **_kwargs: object) -> None:
+        audit_events.append(args)
+
+    async def invalidate(*_args: object) -> None:
+        return None
+
+    monkeypatch.setattr(admin_api, "add_uploaded_image", add_image)
+    monkeypatch.setattr(admin_api, "write_audit_event", audit)
+    monkeypatch.setattr(admin_api, "invalidate_image_caches", invalidate)
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/admin/dining-images",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "https",
+            "server": ("testserver", 443),
+            "state": {"request_id": "dining-request"},
+        }
+    )
+    actor = AdminContext(
+        user={"id": "admin-id"},
+        permissions=frozenset({"dining_images.upload"}),
+        request_id="dining-request",
+    )
+    files = [
+        UploadFile(filename="dining.png", file=io.BytesIO(_image_bytes())),
+        UploadFile(filename="invalid.png", file=io.BytesIO(b"invalid")),
+    ]
+
+    response = asyncio.run(
+        admin_api._upload_files(
+            request, files, "dining", "clinq", actor, Database()
+        )
+    )
+
+    payload = json.loads(response.body)
+    assert response.status_code == 207
+    assert payload["processed"] == 1
+    assert payload["failed"] == 1
+    assert payload["files"][0]["success"] is True
+    assert payload["files"][1]["error"]["code"] == "invalid_image"
+    assert audit_events[0][5] == "partial"
+
+
+def test_upload_commit_failure_rolls_back_and_cleans_created_storage_object(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1 import admin as admin_api
+
+    class FailedCommit:
+        rolled_back = False
+
+        async def commit(self) -> None:
+            raise RuntimeError("metadata commit failed")
+
+        async def rollback(self) -> None:
+            self.rolled_back = True
+
+    async def add_image(*_args: object) -> dict[str, object]:
+        return {
+            "id": "room-image-id",
+            "path": "uploads/room/vajra/room.webp",
+            "_converted": False,
+        }
+
+    async def audit(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    deleted_paths: list[str] = []
+
+    async def delete_object(path: str) -> None:
+        deleted_paths.append(path)
+
+    monkeypatch.setattr(admin_api, "add_uploaded_image", add_image)
+    monkeypatch.setattr(admin_api, "write_audit_event", audit)
+    monkeypatch.setattr(admin_api, "delete_object", delete_object)
+    db = FailedCommit()
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/admin/room-images",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "https",
+            "server": ("testserver", 443),
+            "state": {"request_id": "failed-upload-request"},
+        }
+    )
+    actor = AdminContext(
+        user={"id": "admin-id"},
+        permissions=frozenset({"room_images.upload"}),
+        request_id="failed-upload-request",
+    )
+    upload = UploadFile(filename="room.png", file=io.BytesIO(_image_bytes()))
+
+    with pytest.raises(RuntimeError, match="metadata commit failed"):
+        asyncio.run(
+            admin_api._upload_files(
+                request, [upload], "room", "vajra", actor, db
+            )
+        )
+
+    assert db.rolled_back is True
+    assert deleted_paths == ["uploads/room/vajra/room.webp"]
+
+
+def test_partial_batch_transaction_failure_cleans_only_successful_new_uploads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1 import admin as admin_api
+
+    class FailedCommit:
+        async def commit(self) -> None:
+            raise RuntimeError("batch commit failed")
+
+        async def rollback(self) -> None:
+            return None
+
+    async def add_image(
+        _db: object,
+        _collection: str,
+        _category: str,
+        filename: str,
+        _data: bytes,
+        _actor_id: str,
+    ) -> dict[str, object]:
+        if filename == "invalid.png":
+            raise ImageManagementError("invalid_image", "Invalid image.", 400)
+        return {
+            "id": "room-image-id",
+            "path": "uploads/room/vajra/new-image.webp",
+            "url": "https://project.supabase.co/new-image.webp",
+            "_converted": True,
+        }
+
+    async def audit(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    deleted_paths: list[str] = []
+
+    async def delete_object(path: str) -> None:
+        deleted_paths.append(path)
+
+    monkeypatch.setattr(admin_api, "add_uploaded_image", add_image)
+    monkeypatch.setattr(admin_api, "write_audit_event", audit)
+    monkeypatch.setattr(admin_api, "delete_object", delete_object)
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/admin/room-images",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "https",
+            "server": ("testserver", 443),
+            "state": {"request_id": "partial-batch-request"},
+        }
+    )
+    actor = AdminContext(
+        user={"id": "admin-id"},
+        permissions=frozenset({"room_images.upload"}),
+        request_id="partial-batch-request",
+    )
+    files = [
+        UploadFile(filename="new.png", file=io.BytesIO(_image_bytes())),
+        UploadFile(filename="invalid.png", file=io.BytesIO(b"invalid")),
+    ]
+
+    with pytest.raises(RuntimeError, match="batch commit failed"):
+        asyncio.run(
+            admin_api._upload_files(
+                request, files, "room", "vajra", actor, FailedCommit()
+            )
+        )
+
+    assert deleted_paths == ["uploads/room/vajra/new-image.webp"]
+
+
+def test_cache_invalidation_failure_does_not_delete_committed_upload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1 import admin as admin_api
+
+    class CommittedDatabase:
+        async def commit(self) -> None:
+            return None
+
+        async def rollback(self) -> None:
+            raise AssertionError("A committed upload must not be rolled back.")
+
+    async def add_image(*_args: object) -> dict[str, object]:
+        return {
+            "id": "room-image-id",
+            "path": "uploads/room/vajra/room.webp",
+            "_converted": False,
+        }
+
+    async def audit(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    async def invalidate(*_args: object) -> None:
+        raise RuntimeError("cache unavailable")
+
+    async def delete_object(_path: str) -> None:
+        raise AssertionError("Committed storage must not be deleted.")
+
+    monkeypatch.setattr(admin_api, "add_uploaded_image", add_image)
+    monkeypatch.setattr(admin_api, "write_audit_event", audit)
+    monkeypatch.setattr(admin_api, "invalidate_image_caches", invalidate)
+    monkeypatch.setattr(admin_api, "delete_object", delete_object)
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/admin/room-images",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "https",
+            "server": ("testserver", 443),
+            "state": {"request_id": "cache-failure-request"},
+        }
+    )
+    actor = AdminContext(
+        user={"id": "admin-id"},
+        permissions=frozenset({"room_images.upload"}),
+        request_id="cache-failure-request",
+    )
+    upload = UploadFile(filename="room.png", file=io.BytesIO(_image_bytes()))
+
+    with pytest.raises(RuntimeError, match="cache unavailable"):
+        asyncio.run(
+            admin_api._upload_files(
+                request, [upload], "room", "vajra", actor, CommittedDatabase()
+            )
+        )
+
+
+def test_delete_image_uses_cleanup_record_only_for_post_delete_verification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1 import admin as admin_api
+
+    class Database:
+        async def commit(self) -> None:
+            return None
+
+    cleanup = {
+        "record_id": "deleted-image-id",
+        "storage_path": "uploads/room/vajra/image.webp",
+        "backup": b"original-image",
+    }
+    checked: list[str] = []
+
+    async def delete_image(*_args: object) -> dict[str, object]:
+        return cleanup
+
+    async def get_image(
+        _db: object, _collection: str, _category: str, image_id: str
+    ) -> None:
+        checked.append(image_id)
+        return None
+
+    async def audit(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    async def invalidate(*_args: object) -> None:
+        return None
+
+    monkeypatch.setattr(admin_api, "delete_managed_image", delete_image)
+    monkeypatch.setattr(admin_api, "get_managed_image", get_image)
+    monkeypatch.setattr(admin_api, "write_audit_event", audit)
+    monkeypatch.setattr(admin_api, "invalidate_image_caches", invalidate)
+    endpoint = next(
+        route.endpoint
+        for route in admin_api.router.routes
+        if getattr(route, "path", "") == "/room-images/{image_id}"
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "DELETE",
+            "path": "/api/v1/admin/room-images/deleted-image-id",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "https",
+            "server": ("testserver", 443),
+            "state": {"request_id": "delete-request"},
+        }
+    )
+    actor = AdminContext(
+        user={"id": "admin-id"},
+        permissions=frozenset({"room_images.delete"}),
+        request_id="delete-request",
+    )
+
+    response = asyncio.run(
+        endpoint(request, "deleted-image-id", Database(), actor, "vajra")
+    )
+
+    assert response.status_code == 200
+    assert checked == ["deleted-image-id"]
+
+
 def test_uploaded_image_rejects_empty_file() -> None:
     with pytest.raises(Exception) as empty:
         _process_image(b"", "empty.png")
@@ -1229,6 +1662,87 @@ def test_storage_upload_fails_when_object_verification_differs(
         )
     assert getattr(failed.value, "code", None) == "storage_verification_failed"
     assert methods == ["POST", "GET", "DELETE"]
+
+
+def test_storage_upload_cleans_new_object_when_public_verification_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        supabase_url="https://project.supabase.co",
+        supabase_secret_key="test-secret",
+        supabase_storage_bucket="pns-images",
+        supabase_storage_public=True,
+    )
+    monkeypatch.setattr(image_storage, "get_settings", lambda: settings)
+    requests: list[tuple[str, bool]] = []
+
+    async def request(
+        method: str,
+        _url: str,
+        *,
+        headers: dict[str, str],
+        content: bytes | None = None,
+        json: dict | None = None,
+    ) -> httpx.Response:
+        requests.append((method, bool(headers.get("Authorization"))))
+        if method == "POST":
+            return httpx.Response(200)
+        if method == "GET" and headers.get("Authorization"):
+            return httpx.Response(200, content=b"uploaded bytes")
+        if method == "GET":
+            return httpx.Response(
+                200, headers={"content-type": "image/webp"}, content=b"different bytes"
+            )
+        if method == "DELETE":
+            return httpx.Response(204)
+        raise AssertionError(f"Unexpected method: {method}")
+
+    monkeypatch.setattr(image_storage, "_request", request)
+    with pytest.raises(Exception) as failed:
+        asyncio.run(
+            image_storage.upload_object(
+                "uploads/room/vajra/new.webp", b"uploaded bytes"
+            )
+        )
+
+    assert getattr(failed.value, "code", None) == "storage_verification_failed"
+    assert requests == [("POST", True), ("GET", True), ("GET", False), ("DELETE", True)]
+
+
+def test_storage_duplicate_path_failure_does_not_delete_existing_object(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        supabase_url="https://project.supabase.co",
+        supabase_secret_key="test-secret",
+        supabase_storage_bucket="pns-images",
+    )
+    monkeypatch.setattr(image_storage, "get_settings", lambda: settings)
+    requests: list[str] = []
+
+    async def request(
+        method: str,
+        _url: str,
+        *,
+        headers: dict[str, str],
+        content: bytes | None = None,
+        json: dict | None = None,
+    ) -> httpx.Response:
+        requests.append(method)
+        return httpx.Response(409)
+
+    monkeypatch.setattr(image_storage, "_request", request)
+    with pytest.raises(Exception) as failed:
+        asyncio.run(
+            image_storage.upload_object(
+                "uploads/room/vajra/existing.webp", b"new image"
+            )
+        )
+
+    assert getattr(failed.value, "code", None) == "storage_error"
+    assert requests == ["POST"]
 
 
 def test_storage_requires_backend_configuration(monkeypatch: pytest.MonkeyPatch) -> None:

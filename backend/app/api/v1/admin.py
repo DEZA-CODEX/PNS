@@ -730,9 +730,14 @@ async def _upload_files(
                 {"sourceType": "upload"},
             )
             await db.commit()
-            await invalidate_image_caches(collection, category)
         except Exception:
-            if image.get("path"):
+            rollback_succeeded = True
+            try:
+                await db.rollback()
+            except Exception:
+                rollback_succeeded = False
+                logger.exception("Could not roll back image metadata after upload failure.")
+            if rollback_succeeded and image.get("path"):
                 try:
                     await delete_object(str(image["path"]))
                 except APIError:
@@ -740,16 +745,7 @@ async def _upload_files(
                         "Could not clean up an image object after upload transaction failure."
                     )
             raise
-        if storage_cleanup and storage_cleanup.get("record_id"):
-            remaining = await get_managed_image(
-                db, collection, category, str(storage_cleanup["record_id"])
-            )
-            if remaining is not None:
-                raise ImageManagementError(
-                    "database_delete_unverified",
-                    "The Storage object was removed, but the image mapping still exists.",
-                    503,
-                )
+        await invalidate_image_caches(collection, category)
         return JSONResponse(
             {
                 "success": True,
@@ -762,41 +758,41 @@ async def _upload_files(
 
     results: list[dict[str, Any]] = []
     failure_statuses: list[int] = []
-    for file in files:
-        try:
-            data = await file.read(get_settings().max_upload_bytes + 1)
-            image = await add_uploaded_image(
-                db, collection, category, file.filename or "image", data, actor.user["id"]
-            )
-            converted = bool(image.pop("_converted", False))
-            results.append(
-                {
-                    "originalName": file.filename or "unknown",
-                    "storedName": image.get("filename") or "image.webp",
-                    "format": "webp",
-                    "converted": converted,
-                    "success": True,
-                    "path": image.get("path") or "",
-                    "url": image.get("url") or "",
-                }
-            )
-        except APIError as error:
-            failure_statuses.append(error.status_code)
-            results.append(
-                {
-                    "originalName": file.filename or "unknown",
-                    "storedName": "",
-                    "format": "",
-                    "converted": False,
-                    "success": False,
-                    "path": "",
-                    "url": "",
-                    "error": {"code": error.code, "message": str(error)},
-                }
-            )
-    processed = sum(1 for item in results if item["success"])
-    failed = len(results) - processed
     try:
+        for file in files:
+            try:
+                data = await file.read(get_settings().max_upload_bytes + 1)
+                image = await add_uploaded_image(
+                    db, collection, category, file.filename or "image", data, actor.user["id"]
+                )
+                converted = bool(image.pop("_converted", False))
+                results.append(
+                    {
+                        "originalName": file.filename or "unknown",
+                        "storedName": image.get("filename") or "image.webp",
+                        "format": "webp",
+                        "converted": converted,
+                        "success": True,
+                        "path": image.get("path") or "",
+                        "url": image.get("url") or "",
+                    }
+                )
+            except APIError as error:
+                failure_statuses.append(error.status_code)
+                results.append(
+                    {
+                        "originalName": file.filename or "unknown",
+                        "storedName": "",
+                        "format": "",
+                        "converted": False,
+                        "success": False,
+                        "path": "",
+                        "url": "",
+                        "error": {"code": error.code, "message": str(error)},
+                    }
+                )
+        processed = sum(1 for item in results if item["success"])
+        failed = len(results) - processed
         await write_audit_event(
             db,
             actor.user["id"],
@@ -808,17 +804,24 @@ async def _upload_files(
             {"files": len(results), "success": processed, "failed": failed},
         )
         await db.commit()
-        await invalidate_image_caches(collection, category)
     except Exception:
-        for result in results:
-            if result["success"] and result["path"]:
-                try:
-                    await delete_object(str(result["path"]))
-                except APIError:
-                    logger.exception(
-                        "Could not clean up a batch image object after upload transaction failure."
-                    )
+        rollback_succeeded = True
+        try:
+            await db.rollback()
+        except Exception:
+            rollback_succeeded = False
+            logger.exception("Could not roll back image metadata after upload failure.")
+        if rollback_succeeded:
+            for result in results:
+                if result["success"] and result["path"]:
+                    try:
+                        await delete_object(str(result["path"]))
+                    except APIError:
+                        logger.exception(
+                            "Could not clean up a batch image object after upload transaction failure."
+                        )
         raise
+    await invalidate_image_caches(collection, category)
     status = (
         201
         if failed == 0
@@ -967,6 +970,16 @@ def _image_router(collection: str) -> None:
                 _request_id(request),
             )
             await db.commit()
+            if storage_cleanup and storage_cleanup.get("record_id"):
+                remaining = await get_managed_image(
+                    db, collection, category, str(storage_cleanup["record_id"])
+                )
+                if remaining is not None:
+                    raise ImageManagementError(
+                        "database_delete_unverified",
+                        "The Storage object was removed, but the image mapping still exists.",
+                        503,
+                    )
             await invalidate_image_caches(collection, category)
         except Exception:
             if storage_cleanup and storage_cleanup.get("backup") is not None:
