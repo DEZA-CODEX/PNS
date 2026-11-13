@@ -18,7 +18,6 @@ import { Experience } from "@/home/components/Experience/Experience";
 import { GalleryPreview } from "@/home/components/Gallery/GalleryPreview";
 import { Testimonials } from "@/home/components/Testimonials/Testimonials";
 import { LocationPreview } from "@/home/components/Location/LocationPreview";
-import { BookingCTA } from "@/home/components/BookingCTA/BookingCTA";
 
 export function Home({ contactOpen = false }: { contactOpen?: boolean }) {
   const [booking, setBooking] = useState(false);
@@ -68,7 +67,6 @@ export function Home({ contactOpen = false }: { contactOpen?: boolean }) {
         <GalleryPreview />
         <Testimonials />
         <LocationPreview />
-        <BookingCTA onBook={openBooking} />
         <Footer onBook={openBooking} />
       </main>
       <BookingPanel open={booking} details={bookingDetails} onClose={() => setBooking(false)} />
