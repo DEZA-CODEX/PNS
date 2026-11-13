@@ -2,7 +2,9 @@
 
 The backend's existing `app.core.cache` singleton uses the Upstash Redis REST API. It is reused by FastAPI requests, applies `REDIS_KEY_PREFIX` (default `pns:backend:`), and degrades to PostgreSQL reads when cache access fails. Cache operations use the existing bounded REST retry behavior; cache failures are logged and do not fail public reads.
 
-The Celery broker uses a separate Redis-protocol setting, `CELERY_BROKER_URL` (or the legacy `REDIS_URL` alias). Do not use the HTTPS REST URL as the broker URL. Cache and Celery use distinct key/queue namespaces.
+The REST URL/token accept either the `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` names or Vercel integration names `REDIS_KV_REST_API_URL` / `REDIS_KV_REST_API_TOKEN` (also `KV_REST_API_URL` / `KV_REST_API_TOKEN`). Use a writable token; the read-only token cannot create or update converter data.
+
+The Celery broker uses a separate Redis-protocol setting, `CELERY_BROKER_URL` (or `REDIS_URL` / `REDIS_KV_URL`). Do not use the HTTPS REST URL as the broker URL. Cache and Celery use distinct key/queue namespaces.
 
 ## Current cached resources
 
@@ -29,6 +31,8 @@ FastAPI cache settings:
 
 - `UPSTASH_REDIS_REST_URL`
 - `UPSTASH_REDIS_REST_TOKEN`
+- Vercel aliases: `REDIS_KV_REST_API_URL` and `REDIS_KV_REST_API_TOKEN`
+- Celery broker: `CELERY_BROKER_URL` (or `REDIS_URL` / `REDIS_KV_URL`)
 - `REDIS_KEY_PREFIX` (default `pns:backend:`)
 - `REDIS_ENABLED` (default `true`)
 - `PNS_REDIS_TIMEOUT_SECONDS` (default `2.5`)

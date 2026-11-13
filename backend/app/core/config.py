@@ -70,13 +70,23 @@ class Settings(BaseSettings):
     )
     redis_url: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("CELERY_BROKER_URL", "REDIS_URL"),
+        validation_alias=AliasChoices("CELERY_BROKER_URL", "REDIS_URL", "REDIS_KV_URL"),
     )
     upstash_redis_rest_url: str | None = Field(
-        default=None, validation_alias="UPSTASH_REDIS_REST_URL"
+        default=None,
+        validation_alias=AliasChoices(
+            "UPSTASH_REDIS_REST_URL",
+            "REDIS_KV_REST_API_URL",
+            "KV_REST_API_URL",
+        ),
     )
     upstash_redis_rest_token: str | None = Field(
-        default=None, validation_alias="UPSTASH_REDIS_REST_TOKEN"
+        default=None,
+        validation_alias=AliasChoices(
+            "UPSTASH_REDIS_REST_TOKEN",
+            "REDIS_KV_REST_API_TOKEN",
+            "KV_REST_API_TOKEN",
+        ),
     )
     redis_key_prefix: str = Field(default="pns:backend:", validation_alias="REDIS_KEY_PREFIX")
     redis_default_ttl: int = Field(default=60, validation_alias="REDIS_DEFAULT_TTL", gt=0)
@@ -135,6 +145,58 @@ class Settings(BaseSettings):
     )
     max_upload_bytes: int = 8 * 1024 * 1024
     max_image_pixels: int = 64_000_000
+    converter_max_request_bytes: int = Field(
+        default=64 * 1024 * 1024,
+        validation_alias="PNS_CONVERTER_MAX_REQUEST_BYTES",
+        gt=0,
+    )
+    converter_max_file_bytes: int = Field(
+        default=8 * 1024 * 1024,
+        validation_alias="PNS_CONVERTER_MAX_FILE_BYTES",
+        gt=0,
+    )
+    converter_max_image_pixels: int = Field(
+        default=64_000_000,
+        validation_alias="PNS_CONVERTER_MAX_IMAGE_PIXELS",
+        gt=0,
+    )
+    converter_max_files: int = Field(
+        default=50,
+        validation_alias="PNS_CONVERTER_MAX_FILES",
+        gt=0,
+    )
+    converter_batch_ttl_seconds: int = Field(
+        default=7200,
+        validation_alias="PNS_CONVERTER_BATCH_TTL_SECONDS",
+        gt=0,
+    )
+    converter_max_active_batches: int = Field(
+        default=4,
+        validation_alias="PNS_CONVERTER_MAX_ACTIVE_BATCHES",
+        gt=0,
+    )
+    converter_max_batch_memory_bytes: int = Field(
+        default=48 * 1024 * 1024,
+        validation_alias="PNS_CONVERTER_MAX_BATCH_MEMORY_BYTES",
+        gt=0,
+    )
+    converter_cleanup_interval_seconds: int = Field(
+        default=15 * 60,
+        validation_alias="PNS_CONVERTER_CLEANUP_INTERVAL_SECONDS",
+        ge=60,
+    )
+    converter_webp_quality: int = Field(
+        default=82,
+        validation_alias="PNS_CONVERTER_WEBP_QUALITY",
+        ge=1,
+        le=100,
+    )
+    converter_webp_method: int = Field(
+        default=6,
+        validation_alias="PNS_CONVERTER_WEBP_METHOD",
+        ge=0,
+        le=6,
+    )
 
     @field_validator("cors_origins", "allowed_hosts", mode="before")
     @classmethod

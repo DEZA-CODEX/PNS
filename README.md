@@ -138,3 +138,33 @@ bytes. External URLs remain references and are not fetched. Apply
 `supabase/migrations/20261104_managed_image_database_content.sql` before starting the updated
 backend. Do not use wildcard CORS with credentialed admin cookies; set exact frontend origins in
 `CORS_ORIGINS`.
+
+## Standalone WebP converter
+
+The standalone converter is available at the frontend route `/convert/` and uses a separate
+FastAPI router at `POST /convert/`. It does not use the managed image service, Supabase Storage,
+or the image database tables. `POST /convert/` stores the originals in Redis, publishes only the
+batch ID to Celery, and returns `202` immediately. The dedicated `pns-converter-worker` consumes
+the `pns-converter` queue with concurrency and prefetch both set to one, so batches and their
+ordered image IDs are processed FIFO. The `/convert` page polls the Redis-backed status endpoint.
+
+Temporary originals, converted bytes, and batch metadata use the `pns:backend:converter:*`
+namespace and expire after two hours by default. The API uses the existing Upstash REST client;
+the worker uses the existing Redis protocol URL (`CELERY_BROKER_URL`) and does not create another
+Redis service. Configure `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` or Vercel's
+`REDIS_KV_REST_API_URL` / `REDIS_KV_REST_API_TOKEN`, `REDIS_ENABLED`, and a Redis protocol broker
+URL (`CELERY_BROKER_URL`, `REDIS_URL`, or Vercel's `REDIS_KV_URL`) before enabling the converter.
+The converter returns a clear 503 response when temporary storage or the queue is unavailable.
+Limits are configurable through
+`PNS_CONVERTER_MAX_REQUEST_BYTES` (64 MiB), `PNS_CONVERTER_MAX_FILE_BYTES` (8 MiB),
+`PNS_CONVERTER_MAX_IMAGE_PIXELS` (64 million), `PNS_CONVERTER_MAX_FILES` (50),
+`PNS_CONVERTER_BATCH_TTL_SECONDS` (7200), `PNS_CONVERTER_MAX_BATCH_MEMORY_BYTES` (48 MiB),
+`PNS_CONVERTER_MAX_ACTIVE_BATCHES` (4), `PNS_CONVERTER_CLEANUP_INTERVAL_SECONDS` (900),
+`PNS_CONVERTER_WEBP_QUALITY` (82), and `PNS_CONVERTER_WEBP_METHOD` (6).
+
+Additional endpoints are `GET /convert/{batch_id}/status`,
+`GET /convert/{batch_id}/files/{file_id}`, `GET /convert/{batch_id}/download-all`, and
+`DELETE /convert/{batch_id}` for explicit cleanup. Download responses are generated from the
+temporary WebP bytes and never reconvert the originals. Railway service creation and Vercel
+environment-variable checks are documented in
+[docs/PNS_RAILWAY_DEPLOYMENT.md](./docs/PNS_RAILWAY_DEPLOYMENT.md).

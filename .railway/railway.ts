@@ -13,6 +13,13 @@ export default defineRailway((ctx) => {
     PNS_CELERY_JOB_CLEANUP_HOUR: "3",
     PNS_CELERY_JOB_CLEANUP_MINUTE: "15",
     PNS_BACKGROUND_JOB_RETENTION_DAYS: "30",
+    PNS_CONVERTER_BATCH_TTL_SECONDS: "7200",
+    PNS_CONVERTER_MAX_REQUEST_BYTES: "67108864",
+    PNS_CONVERTER_MAX_FILE_BYTES: "8388608",
+    PNS_CONVERTER_MAX_FILES: "50",
+    PNS_CONVERTER_MAX_BATCH_MEMORY_BYTES: "50331648",
+    PNS_CONVERTER_MAX_ACTIVE_BATCHES: "4",
+    PNS_CONVERTER_CLEANUP_INTERVAL_SECONDS: "900",
   };
   const beatSchedule = volume("pns-celery-beat-schedule", { sizeMB: 1024 });
 
@@ -45,7 +52,20 @@ export default defineRailway((ctx) => {
     },
   });
 
+  const converterWorker = service("pns-converter-worker", {
+    source: github("DEZA-CODEX/PNS", { rootDirectory: "backend" }),
+    build: "pip install -r requirements.txt",
+    start:
+      "celery -A app.celery_app:celery_app worker --loglevel=INFO --queues=pns-converter --concurrency=1 --prefetch-multiplier=1",
+    replicas: 1,
+    env: sharedEnv,
+    deploy: {
+      restartPolicyType: "ON_FAILURE",
+      restartPolicyMaxRetries: 10,
+    },
+  });
+
   return project("pns-hotel", {
-    resources: [worker, beat, beatSchedule],
+    resources: [worker, converterWorker, beat, beatSchedule],
   });
 });

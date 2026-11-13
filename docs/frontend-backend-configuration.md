@@ -24,8 +24,8 @@ values must never be copied into the frontend environment.
 | `PNS_COOKIE_DOMAIN`        | FastAPI      | Optional cookie domain, e.g. a shared parent domain for frontend/API subdomains.                         |
 | `PNS_SESSION_DURATION_MINUTES` | FastAPI  | Admin session lifetime in minutes; defaults to `480` (8 hours).                                          |
 | `PNS_REMEMBERED_SESSION_DURATION_MINUTES` | FastAPI | Admin “Remember me” lifetime in minutes; defaults to `43200` (30 days).                    |
-| `UPSTASH_REDIS_REST_URL` | FastAPI or Next.js server | Upstash REST endpoint; keep it server-only. |
-| `UPSTASH_REDIS_REST_TOKEN` | FastAPI or Next.js server | Upstash REST token; never expose it to browser code. |
+| `UPSTASH_REDIS_REST_URL` / `REDIS_KV_REST_API_URL` | FastAPI or Next.js server | Upstash REST endpoint; keep it server-only. |
+| `UPSTASH_REDIS_REST_TOKEN` / `REDIS_KV_REST_API_TOKEN` | FastAPI or Next.js server | Writable Upstash REST token; never expose it to browser code. |
 | `REDIS_KEY_PREFIX` | FastAPI or Next.js server | Namespace prefix; use `pns:backend:` for FastAPI and `pns:frontend:` for Next.js. |
 | `REDIS_DEFAULT_TTL` | FastAPI or Next.js server | Default cache lifetime in seconds; defaults to `60`. |
 | `REDIS_ENABLED` | FastAPI or Next.js server | Set to `true` to enable Redis, or `false` for normal API/database fallback. |

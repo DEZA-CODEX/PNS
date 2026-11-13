@@ -38,12 +38,14 @@ def test_celery_uses_json_and_separate_maintenance_queue() -> None:
     assert celery_app.conf.task_default_queue == "pns-default"
     assert celery_app.conf.broker_transport_options["global_keyprefix"] == "pns:celery:"
     assert "pns-maintenance" in {queue.name for queue in celery_app.conf.task_queues}
-    assert len(celery_app.conf.beat_schedule) == 2
+    assert len(celery_app.conf.beat_schedule) == 3
     assert {
         "pns.tasks.cleanup_background_jobs",
         "pns.tasks.dispatch_pending_jobs",
         "pns.tasks.invalidate_image_cache",
         "pns.tasks.celery_connectivity_test",
+        "pns.tasks.convert_image_batch",
+        "pns.tasks.cleanup_converter_batches",
     }.issubset(celery_app.tasks)
     assert (
         celery_app.conf.task_routes["pns.tasks.celery_connectivity_test"]["queue"]

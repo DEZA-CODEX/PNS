@@ -17,6 +17,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.diagnostics import DIAGNOSTICS_DASHBOARD
 from app.api.diagnostics import router as diagnostics_router
+from app.api.converter import router as converter_router
 from app.api.v1.router import router as v1_router
 from app.core.config import get_settings
 from app.core.cache import close_redis
@@ -204,6 +205,7 @@ async def handle_unexpected_error(request: Request, error: Exception) -> JSONRes
 
 
 fastapi_app.include_router(v1_router, prefix="/api/v1")
+fastapi_app.include_router(converter_router)
 fastapi_app.include_router(diagnostics_router, prefix="/api/v1")
 
 

@@ -41,7 +41,7 @@ validate_broker_url(settings.redis_url, settings.app_env)
 celery_app = Celery(
     "pns",
     broker=settings.redis_url or "redis://localhost:6379/0",
-    include=["app.tasks.jobs"],
+    include=["app.tasks.jobs", "app.tasks.converter_tasks"],
 )
 celery_app.conf.update(
     accept_content=["json"],
@@ -58,12 +58,15 @@ celery_app.conf.update(
     task_queues=(
         Queue("pns-default"),
         Queue("pns-maintenance"),
+        Queue("pns-converter"),
     ),
     task_routes={
         "pns.tasks.invalidate_image_cache": {"queue": "pns-maintenance"},
         "pns.tasks.dispatch_pending_jobs": {"queue": "pns-maintenance"},
         "pns.tasks.cleanup_background_jobs": {"queue": "pns-maintenance"},
         "pns.tasks.celery_connectivity_test": {"queue": "pns-maintenance"},
+        "pns.tasks.convert_image_batch": {"queue": "pns-converter"},
+        "pns.tasks.cleanup_converter_batches": {"queue": "pns-maintenance"},
     },
     worker_prefetch_multiplier=1,
     worker_max_tasks_per_child=500,
@@ -106,6 +109,10 @@ celery_app.conf.update(
                 hour=settings.celery_job_cleanup_hour,
                 minute=settings.celery_job_cleanup_minute,
             ),
+        },
+        "cleanup-expired-converter-batches": {
+            "task": "pns.tasks.cleanup_converter_batches",
+            "schedule": settings.converter_cleanup_interval_seconds,
         },
     },
 )
