@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Mapping
 from typing import Annotated, Literal
@@ -15,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.celery_app import celery_app
 from app.core.admin_types import AdminContext
+from app.core.config import get_settings
 from app.core.database import get_db_session
 from app.core.dependencies import require_permission
 from app.core.responses import JSONResponse
@@ -22,6 +24,7 @@ from app.core.responses import JSONResponse
 logger = logging.getLogger("pns.api.admin_jobs")
 router = APIRouter()
 Database = Annotated[AsyncSession, Depends(get_db_session)]
+CELERY_CONNECTIVITY_TEST_TASK = "pns.tasks.celery_connectivity_test"
 
 
 class CreateJobRequest(BaseModel):
@@ -177,21 +180,57 @@ async def create_job(
         )
 
     job_id_text = str(job_id)
+    request_id = getattr(request.state, "request_id", "unknown")
+    logger.info(
+        "%s",
+        json.dumps(
+            {
+                "event": "background_job_created",
+                "request_id": request_id,
+                "correlation_id": job_id_text,
+                "background_job_id": job_id_text,
+                "celery_task_id": job_id_text,
+                "job_type": body.job_type,
+                "queue_name": "pns-maintenance",
+                "status": "pending",
+                "retry_count": 0,
+            },
+            sort_keys=True,
+        ),
+    )
     dispatch_status = "pending_retry"
     try:
-        await asyncio.to_thread(
+        published_task = await asyncio.to_thread(
             celery_app.send_task,
             "pns.tasks.invalidate_image_cache",
             args=[job_id_text],
             task_id=job_id_text,
             queue="pns-maintenance",
+            headers={
+                "background_job_id": job_id_text,
+                "correlation_id": job_id_text,
+                "job_type": body.job_type,
+                "request_id": request_id,
+            },
         )
     except (OperationalError, redis.RedisError, OSError, TimeoutError) as error:
         logger.warning(
-            "Background job is committed and will be dispatched by Beat "
-            "(job_id=%s, error=%s).",
-            job_id_text,
-            type(error).__name__,
+            "%s",
+            json.dumps(
+                {
+                    "event": "background_job_publish_failed",
+                    "request_id": request_id,
+                    "correlation_id": job_id_text,
+                    "background_job_id": job_id_text,
+                    "celery_task_id": job_id_text,
+                    "job_type": body.job_type,
+                    "queue_name": "pns-maintenance",
+                    "failure_reason": type(error).__name__,
+                    "status": "pending",
+                    "retry_count": 0,
+                },
+                sort_keys=True,
+            ),
         )
         await db.execute(
             text(
@@ -210,6 +249,23 @@ async def create_job(
         await db.commit()
     else:
         dispatch_status = "queued"
+        logger.info(
+            "%s",
+            json.dumps(
+                {
+                    "event": "background_job_published",
+                    "request_id": request_id,
+                    "correlation_id": job_id_text,
+                    "background_job_id": job_id_text,
+                    "celery_task_id": published_task.id or job_id_text,
+                    "job_type": body.job_type,
+                    "queue_name": "pns-maintenance",
+                    "status": "queued",
+                    "retry_count": 0,
+                },
+                sort_keys=True,
+            ),
+        )
         await db.execute(
             text(
                 """
@@ -234,6 +290,99 @@ async def create_job(
             "job": _job_response(current_job._mapping),
             "dispatch": dispatch_status,
             "requestId": getattr(request.state, "request_id", "unknown"),
+        },
+        status_code=202,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.post("/diagnostics/celery", status_code=202)
+async def enqueue_celery_connectivity_test(
+    request: Request,
+    _: Annotated[AdminContext, Depends(require_permission("jobs.read"))],
+) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    if not get_settings().redis_url:
+        logger.warning(
+            "%s",
+            json.dumps(
+                {
+                    "event": "celery_connectivity_test_publish_failed",
+                    "request_id": request_id,
+                    "failure_reason": "broker_not_configured",
+                },
+                sort_keys=True,
+            ),
+        )
+        return JSONResponse(
+            {
+                "success": False,
+                "requestId": request_id,
+                "error": {
+                    "code": "broker_unavailable",
+                    "message": "The background task broker is not configured.",
+                },
+            },
+            status_code=503,
+        )
+
+    task_id = str(uuid4())
+    try:
+        published_task = await asyncio.to_thread(
+            celery_app.send_task,
+            CELERY_CONNECTIVITY_TEST_TASK,
+            task_id=task_id,
+            queue="pns-maintenance",
+            headers={"correlation_id": task_id, "request_id": request_id},
+        )
+    except (OperationalError, redis.RedisError, OSError, TimeoutError) as error:
+        logger.warning(
+            "%s",
+            json.dumps(
+                {
+                    "event": "celery_connectivity_test_publish_failed",
+                    "request_id": request_id,
+                    "correlation_id": task_id,
+                    "celery_task_id": task_id,
+                    "queue_name": "pns-maintenance",
+                    "failure_reason": type(error).__name__,
+                },
+                sort_keys=True,
+            ),
+        )
+        return JSONResponse(
+            {
+                "success": False,
+                "requestId": request_id,
+                "error": {
+                    "code": "broker_unavailable",
+                    "message": "The background task broker could not be reached.",
+                },
+            },
+            status_code=503,
+        )
+
+    logger.info(
+        "%s",
+        json.dumps(
+            {
+                "event": "celery_connectivity_test_published",
+                "request_id": request_id,
+                "correlation_id": task_id,
+                "celery_task_id": published_task.id or task_id,
+                "queue_name": "pns-maintenance",
+                "task_name": CELERY_CONNECTIVITY_TEST_TASK,
+                "status": "queued",
+            },
+            sort_keys=True,
+        ),
+    )
+    return JSONResponse(
+        {
+            "success": True,
+            "taskId": published_task.id or task_id,
+            "queue": "pns-maintenance",
+            "requestId": request_id,
         },
         status_code=202,
         headers={"Cache-Control": "no-store"},

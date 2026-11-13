@@ -9,10 +9,12 @@ import socket
 from contextlib import asynccontextmanager
 from collections.abc import Iterator
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 from PIL import Image
 from pydantic import ValidationError
@@ -494,11 +496,22 @@ def test_database_dependency_returns_503_when_connection_fails(
     monkeypatch.setattr(
         database_module, "get_session_factory", lambda: UnreachableSessionFactory
     )
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/test-database",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "https",
+            "server": ("testserver", 443),
+        }
+    )
 
     async def get_session() -> None:
-        await anext(database_module.get_db_session())
+        await anext(database_module.get_db_session(request))
 
-    with pytest.raises(ServiceUnavailableError, match="database is unavailable"):
+    with pytest.raises(ServiceUnavailableError, match="temporarily unavailable"):
         asyncio.run(get_session())
 
 
@@ -678,6 +691,13 @@ def test_login_cookie_is_used_for_session_verification(
 
     session_tokens: list[str | None] = []
 
+    def unexpected_celery_publish(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("Admin login must not publish a Celery task.")
+
+    from app.api.v1 import admin_jobs as admin_jobs_api
+
+    monkeypatch.setattr(admin_jobs_api.celery_app, "send_task", unexpected_celery_publish)
+
     async def get_context(_db: object, token: str | None, *_args: object) -> AdminContext:
         session_tokens.append(token)
         return AdminContext(
@@ -745,6 +765,7 @@ def test_all_existing_api_contracts_are_registered() -> None:
     }
     expected = {
         ("/api/v1/admin/auth/login", "POST"),
+        ("/api/v1/admin/jobs/diagnostics/celery", "POST"),
         ("/api/v1/admin/auth/logout", "POST"),
         ("/api/v1/admin/auth/me", "GET"),
         ("/api/v1/admin/users", "GET"),
@@ -778,6 +799,7 @@ def test_all_existing_api_contracts_are_registered() -> None:
         ("/api/v1/admin/groups", "get"),
         ("/api/v1/admin/room-images?type=vajra", "get"),
         ("/api/v1/admin/dining-images?type=clinq", "get"),
+        ("/api/v1/admin/jobs/diagnostics/celery", "post"),
     ],
 )
 def test_admin_routes_reject_missing_session_and_test_tokens(
@@ -788,6 +810,41 @@ def test_admin_routes_reject_missing_session_and_test_tokens(
     )
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "unauthorized"
+
+
+def test_celery_connectivity_test_requires_jobs_read_and_publishes_to_maintenance(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1 import admin_jobs as admin_jobs_api
+    from app.core.dependencies import optional_admin_context
+
+    context = AdminContext(
+        user={"id": "admin-id", "email": "admin@example.com"},
+        permissions=frozenset({"jobs.read"}),
+        request_id="request-test",
+    )
+    fastapi_app.dependency_overrides[optional_admin_context] = lambda: context
+    monkeypatch.setattr(
+        admin_jobs_api,
+        "get_settings",
+        lambda: Settings(_env_file=None, redis_url="rediss://broker.example.test"),
+    )
+    publications: list[tuple[str, dict[str, object]]] = []
+
+    def send_task(task_name: str, **kwargs: object) -> SimpleNamespace:
+        publications.append((task_name, kwargs))
+        return SimpleNamespace(id=kwargs["task_id"])
+
+    monkeypatch.setattr(admin_jobs_api.celery_app, "send_task", send_task)
+    response = client.post("/api/v1/admin/jobs/diagnostics/celery")
+
+    assert response.status_code == 202
+    assert response.json()["success"] is True
+    assert response.json()["queue"] == "pns-maintenance"
+    assert publications[0][0] == "pns.tasks.celery_connectivity_test"
+    assert publications[0][1]["queue"] == "pns-maintenance"
+    assert publications[0][1]["headers"]["request_id"] == response.json()["requestId"]
 
 
 def test_password_hash_supports_bcrypt_and_legacy_scrypt() -> None:

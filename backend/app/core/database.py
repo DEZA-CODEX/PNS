@@ -60,23 +60,23 @@ async def get_db_session(request: Request) -> AsyncIterator[AsyncSession]:
     factory = get_session_factory()
     if factory is None:
         raise ServiceUnavailableError("The PostgreSQL connection is not configured.")
-    async with factory() as session:
-        try:
+    try:
+        async with factory() as session:
             yield session
-        except IntegrityError:
+    except IntegrityError:
+        raise
+    except SQLAlchemyError as error:
+        if not _is_connectivity_error(error):
             raise
-        except SQLAlchemyError as error:
-            if not _is_connectivity_error(error):
-                raise
-            logger.exception(
-                "Database connection failed for %s %s (request_id=%s).",
-                request.method,
-                request.url.path,
-                getattr(request.state, "request_id", "unknown"),
-            )
-            raise ServiceUnavailableError(
-                "The requested service is temporarily unavailable. Please try again later."
-            ) from error
+        logger.exception(
+            "Database connection failed for %s %s (request_id=%s).",
+            request.method,
+            request.url.path,
+            getattr(request.state, "request_id", "unknown"),
+        )
+        raise ServiceUnavailableError(
+            "The requested service is temporarily unavailable. Please try again later."
+        ) from error
 
 
 async def close_database() -> None:

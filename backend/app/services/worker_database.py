@@ -32,5 +32,5 @@ def get_worker_engine() -> Engine:
         max_overflow=0,
         pool_recycle=settings.database_pool_recycle_seconds,
         pool_timeout=settings.database_pool_timeout_seconds,
-        connect_args={"connect_timeout": 5},
+        connect_args={"connect_timeout": 5, "prepare_threshold": None},
     )

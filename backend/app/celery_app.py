@@ -63,6 +63,7 @@ celery_app.conf.update(
         "pns.tasks.invalidate_image_cache": {"queue": "pns-maintenance"},
         "pns.tasks.dispatch_pending_jobs": {"queue": "pns-maintenance"},
         "pns.tasks.cleanup_background_jobs": {"queue": "pns-maintenance"},
+        "pns.tasks.celery_connectivity_test": {"queue": "pns-maintenance"},
     },
     worker_prefetch_multiplier=1,
     worker_max_tasks_per_child=500,
