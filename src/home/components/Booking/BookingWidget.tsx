@@ -213,10 +213,10 @@ export function BookingWidget({
                   aria-label="Traveling for work"
                   aria-checked={details.travelingForWork}
                   onClick={() => updateDetails("travelingForWork", !details.travelingForWork)}
-                  className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${details.travelingForWork ? "bg-gold" : "bg-navy/35"}`}
+                  className="relative h-6 w-11 shrink-0 rounded-full bg-gold"
                 >
                   <span
-                    className={`absolute top-1 size-4 rounded-full bg-white transition-transform ${details.travelingForWork ? "translate-x-6" : "translate-x-1"}`}
+                    className={`absolute left-1 top-1 size-4 rounded-full bg-black transition-transform ${details.travelingForWork ? "translate-x-5" : ""}`}
                   />
                 </button>
               </div>
@@ -231,10 +231,10 @@ export function BookingWidget({
                   aria-label="Traveling with pets"
                   aria-checked={details.travelingWithPets}
                   onClick={() => updateDetails("travelingWithPets", !details.travelingWithPets)}
-                  className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${details.travelingWithPets ? "bg-gold" : "bg-navy/35"}`}
+                  className="relative h-6 w-11 shrink-0 rounded-full bg-gold"
                 >
                   <span
-                    className={`absolute top-1 size-4 rounded-full bg-white transition-transform ${details.travelingWithPets ? "translate-x-6" : "translate-x-1"}`}
+                    className={`absolute left-1 top-1 size-4 rounded-full bg-black transition-transform ${details.travelingWithPets ? "translate-x-5" : ""}`}
                   />
                 </button>
               </div>
