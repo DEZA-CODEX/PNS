@@ -35,28 +35,10 @@ const roomLinks = roomCategories.map((room) => ({
 }));
 
 const banquetLinks = [
-  {
-    label: "Weddings & receptions",
-    href: "/banquet#enquire",
-    description: "Memorable celebrations",
-  },
-  {
-    label: "Engagements & anniversaries",
-    href: "/banquet#enquire",
-    description: "Special occasions",
-  },
-  { label: "Birthday celebrations", href: "/banquet#enquire", description: "Celebrate together" },
-  {
-    label: "Family & private functions",
-    href: "/banquet#enquire",
-    description: "Gather beautifully",
-  },
-  { label: "Corporate meetings", href: "/banquet#enquire", description: "Professional events" },
-  {
-    label: "Business events & launches",
-    href: "/banquet#enquire",
-    description: "Bring ideas to life",
-  },
+  
+  { label: "Tamara", href: "/banquet#halls", description: "Grand celebrations" },
+  { label: "Tavisha", href: "/banquet#halls", description: "Gather beautifully" },
+  { label: "Titiksha", href: "/banquet#halls", description: "Meet and connect" },
 ];
 
 export function Navbar({ onBook }: { onBook: () => void }) {

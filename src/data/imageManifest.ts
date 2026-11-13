@@ -1,39 +1,36 @@
-import heroBackground1 from "@/assets/hero-bg/Screenshot 2026-10-15 183625.png";
-import heroBackground2 from "@/assets/hero-bg/Screenshot 2026-10-15 183636.png";
-import heroBackground3 from "@/assets/hero-bg/Screenshot 2026-10-15 184654.png";
-import heroBackground4 from "@/assets/hero-bg/Screenshot 2026-10-15 184715.png";
+import type { StaticImageData } from "next/image";
 import heroHotel from "@/assets/hero-bg/hero-hotel.jpg";
-import heroBackground6 from "@/assets/hero-bg/image.webp";
-import heroContainer1 from "@/assets/hero-container-img/Screenshot 2026-10-15 183541.png";
-import heroContainer2 from "@/assets/hero-container-img/Screenshot 2026-10-15 183607.png";
-import heroContainer3 from "@/assets/hero-container-img/Screenshot 2026-10-15 183636.png";
-import heroContainer4 from "@/assets/hero-container-img/Screenshot 2026-10-15 183710.png";
-import heroContainer5 from "@/assets/hero-container-img/Screenshot 2026-10-15 183721.png";
-import heroContainer6 from "@/assets/hero-container-img/Screenshot 2026-10-15 184654.png";
-import heroContainer7 from "@/assets/hero-container-img/Screenshot 2026-10-15 184725.png";
-import heroContainer8 from "@/assets/hero-container-img/Screenshot 2026-10-15 184740.png";
-import heroContainer9 from "@/assets/hero-container-img/image.webp";
+
+type ImageModule = { default: StaticImageData };
+
+const imagePatterns = [
+  "../assets/hero-bg/*.avif",
+  "../assets/hero-bg/*.gif",
+  "../assets/hero-bg/*.jpeg",
+  "../assets/hero-bg/*.jpg",
+  "../assets/hero-bg/*.png",
+  "../assets/hero-bg/*.webp",
+  "../assets/hero-container-img/*.avif",
+  "../assets/hero-container-img/*.gif",
+  "../assets/hero-container-img/*.jpeg",
+  "../assets/hero-container-img/*.jpg",
+  "../assets/hero-container-img/*.png",
+  "../assets/hero-container-img/*.webp",
+];
+
+const images = import.meta.glob<ImageModule>(imagePatterns, { eager: true });
+
+function getImages(folder: "hero-bg" | "hero-container-img") {
+  const folderPath = `../assets/${folder}/`;
+
+  return Object.entries(images)
+    .filter(([path]) => path.startsWith(folderPath))
+    .map(([, image]) => image.default);
+}
 
 export const heroImageManifest = {
-  hero_background: [
-    heroBackground1,
-    heroBackground2,
-    heroBackground3,
-    heroBackground4,
-    heroHotel,
-    heroBackground6,
-  ],
-  hero_container: [
-    heroContainer1,
-    heroContainer2,
-    heroContainer3,
-    heroContainer4,
-    heroContainer5,
-    heroContainer6,
-    heroContainer7,
-    heroContainer8,
-    heroContainer9,
-  ],
-} as const;
+  hero_background: getImages("hero-bg"),
+  hero_container: getImages("hero-container-img"),
+};
 
 export const heroHotelImage = heroHotel;
