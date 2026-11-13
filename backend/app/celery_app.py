@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import ssl
 from urllib.parse import urlsplit
 
 from celery import Celery
@@ -25,6 +26,12 @@ def validate_broker_url(url: str | None, app_env: str) -> None:
         app_env.lower() == "production" or parsed_url.hostname not in local_hosts
     ):
         raise ValueError("CELERY_BROKER_URL must use TLS (rediss://) outside local development.")
+
+
+def broker_ssl_options(url: str | None) -> dict[str, object] | None:
+    if not url or urlsplit(url).scheme != "rediss":
+        return None
+    return {"ssl_cert_reqs": ssl.CERT_REQUIRED}
 
 
 if not settings.redis_url:
@@ -62,6 +69,7 @@ celery_app.conf.update(
     worker_send_task_events=True,
     worker_cancel_long_running_tasks_on_connection_loss=True,
     task_send_sent_event=True,
+    broker_use_ssl=broker_ssl_options(settings.redis_url),
     broker_connection_timeout=5,
     broker_connection_retry=True,
     broker_connection_retry_on_startup=True,
@@ -85,6 +93,7 @@ celery_app.conf.update(
     result_expires=3600,
     timezone="UTC",
     enable_utc=True,
+    worker_concurrency=settings.celery_worker_concurrency,
     beat_schedule={
         "dispatch-pending-background-jobs": {
             "task": "pns.tasks.dispatch_pending_jobs",

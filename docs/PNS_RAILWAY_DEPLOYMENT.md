@@ -26,11 +26,13 @@ Review the plan to ensure it only adds/updates the two Celery services and Beat'
 railway config apply
 ```
 
+The worker's concurrency comes from `PNS_CELERY_WORKER_CONCURRENCY` (default `1`, permitted range `1`–`16`); the Railway IaC sets its initial value to `1`. Its Celery `worker_prefetch_multiplier` is `1`. Do not add a second worker process to the start command.
+
 The resulting service settings are:
 
 | Railway service | IaC config | Build command | Start command |
 | --- | --- | --- | --- |
-| `pns-celery-worker` | `.railway/railway.ts` | `pip install -r requirements.txt` | `celery -A app.celery_app:celery_app worker --loglevel=INFO --concurrency=1 --queues=pns-default,pns-maintenance` |
+| `pns-celery-worker` | `.railway/railway.ts` | `pip install -r requirements.txt` | `celery -A app.celery_app:celery_app worker --loglevel=INFO --queues=pns-default,pns-maintenance` |
 | `pns-celery-beat` | `.railway/railway.ts` | `pip install -r requirements.txt` | `celery -A app.celery_app:celery_app beat --loglevel=INFO --schedule=/data/celerybeat-schedule` |
 
 Both services install the existing `backend/requirements.txt` dependencies and use the actual Celery application at `app.celery_app:celery_app`; neither command starts FastAPI. Each uses Railway's `ON_FAILURE` restart policy with up to 10 retries and one replica. The Beat service has a 1 GB persistent volume mounted at `/data`, so Celery's schedule file survives restarts.
@@ -47,6 +49,7 @@ Create the two sensitive values below as Railway **shared environment variables*
 | `RAILPACK_PYTHON_VERSION` | `3.12.8` (matches the existing Render runtime). |
 | `REDIS_KEY_PREFIX` | `pns:backend:` (must match the FastAPI backend's value). |
 | `PNS_CELERY_TASK_TIME_LIMIT_SECONDS` | `900` |
+| `PNS_CELERY_WORKER_CONCURRENCY` | `1` initially; the backend accepts `1`–`16`. Increase only after checking memory and database capacity. |
 | `PNS_CELERY_JOB_DISPATCH_INTERVAL_SECONDS` | `30` |
 | `PNS_CELERY_JOB_CLEANUP_HOUR` | `3` |
 | `PNS_CELERY_JOB_CLEANUP_MINUTE` | `15` |
@@ -67,4 +70,10 @@ The current worker tasks require no Supabase Storage credentials. Do not add the
 5. Restart Beat and check that its service returns to running with its schedule volume still mounted. Confirm there is only one Beat service/schedule owner.
 6. Confirm the Vercel API still has the same broker URL and the frontend/backend Vercel deployments remain unchanged.
 
-Railway credentials and access to production resources are not available in this repository workspace, so live broker/database connectivity and an actual deployment must be verified in the Railway and Supabase dashboards.
+## Production log follow-up
+
+The checked-in IaC defines one worker replica, one Beat replica, one worker command, and separate services; the worker command does not start Beat or launch a second worker. Both services use the same shared broker and database settings, and both import the same `app.celery_app:celery_app` application. The worker's `ON_FAILURE` policy can restart it up to 10 times. A repeated startup banner is therefore consistent with restarts, but the repository cannot establish whether the deployed service has dashboard overrides, another replica, a duplicate Render worker, or a crashing process. Compare Railway deployment/restart events and service settings with this IaC; ensure only one active worker service and one Beat service. The reported concurrency of 48 does not match the repository configuration and likely comes from an active dashboard/start-command override or another deployment.
+
+The Redis URL and credentials are passed through unchanged. For a `rediss://` broker, Celery is configured with `ssl.CERT_REQUIRED`; this verifies the server certificate. The Railway build uses Railpack and has no Dockerfile or configured runtime user. No non-root user is introduced because the current build has no explicit user creation/ownership setup, so its safe runtime permissions cannot be established from this repository. The root warning remains until a deliberate, tested non-root image/build setup is adopted.
+
+The tasks currently use a separate synchronous SQLAlchemy engine with psycopg (`backend/app/services/worker_database.py`); they do not use async SQLAlchemy sessions or asyncpg. The FastAPI application uses async SQLAlchemy/asyncpg independently. Redis connectivity does not verify Supabase connectivity; confirm database access and migrations independently in Railway/Supabase. No production Railway, Redis, or Supabase test has been run from this workspace.

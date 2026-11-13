@@ -26,11 +26,11 @@ PNS_ALLOWED_HOSTS=localhost,testserver
 From `backend/`:
 
 ```sh
-celery -A app.celery_app:celery_app worker --loglevel=INFO --concurrency=1 --queues=pns-default,pns-maintenance
+celery -A app.celery_app:celery_app worker --loglevel=INFO --queues=pns-default,pns-maintenance
 celery -A app.celery_app:celery_app beat --loglevel=INFO --schedule=/tmp/pns-celerybeat-schedule
 ```
 
-Only one Beat process should own this schedule. Celery uses JSON serialization, late acknowledgements, one-message worker prefetch, bounded retries, task time limits, and stable job/task IDs. The synchronous worker database engine uses a separate one-connection pool and the same `DATABASE_URL` (converted to the psycopg driver); its SSL query parameters are preserved.
+The worker concurrency is configured by `PNS_CELERY_WORKER_CONCURRENCY` (default `1`, permitted range `1`–`16`); its prefetch multiplier is `1`. Only one Beat process should own this schedule. Celery uses JSON serialization, late acknowledgements, one-message worker prefetch, bounded retries, task time limits, and stable job/task IDs. The synchronous worker database engine uses a separate one-connection pool and the same `DATABASE_URL` (converted to the psycopg driver); its SSL query parameters are preserved.
 
 The FastAPI deployment also needs the same `CELERY_BROKER_URL` to publish an admin-requested job immediately. Configure it as a server-side Vercel environment variable; do not use a `NEXT_PUBLIC_` prefix. If the broker publish fails, FastAPI keeps the PostgreSQL outbox row pending and the Beat dispatcher retries it.
 

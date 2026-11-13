@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import ssl
 
 import httpx
 import pytest
 
-from app.celery_app import celery_app, validate_broker_url
+from app.celery_app import broker_ssl_options, celery_app, validate_broker_url
 from app.api.v1.admin_jobs import _job_response
 from app.core import cache
 from app.core.config import Settings
@@ -18,10 +19,34 @@ def test_celery_uses_json_and_separate_maintenance_queue() -> None:
     assert celery_app.conf.task_serializer == "json"
     assert celery_app.conf.task_acks_late is True
     assert celery_app.conf.worker_prefetch_multiplier == 1
+    assert (
+        celery_app.conf.worker_concurrency
+        == Settings(_env_file=None).celery_worker_concurrency
+    )
     assert celery_app.conf.task_default_queue == "pns-default"
     assert celery_app.conf.broker_transport_options["global_keyprefix"] == "pns:celery:"
     assert "pns-maintenance" in {queue.name for queue in celery_app.conf.task_queues}
     assert len(celery_app.conf.beat_schedule) == 2
+    assert {
+        "pns.tasks.cleanup_background_jobs",
+        "pns.tasks.dispatch_pending_jobs",
+        "pns.tasks.invalidate_image_cache",
+    }.issubset(celery_app.tasks)
+
+
+def test_rediss_broker_requires_certificate_verification() -> None:
+    assert broker_ssl_options("rediss://default:secret@redis.example.test:6379") == {
+        "ssl_cert_reqs": ssl.CERT_REQUIRED
+    }
+    assert broker_ssl_options("redis://localhost:6379/0") is None
+
+
+def test_worker_concurrency_is_configurable_and_bounded(monkeypatch) -> None:
+    monkeypatch.setenv("PNS_CELERY_WORKER_CONCURRENCY", "2")
+    assert Settings(_env_file=None).celery_worker_concurrency == 2
+    monkeypatch.setenv("PNS_CELERY_WORKER_CONCURRENCY", "0")
+    with pytest.raises(ValueError):
+        Settings(_env_file=None)
 
 
 def test_worker_database_url_preserves_tls_query_parameters() -> None:

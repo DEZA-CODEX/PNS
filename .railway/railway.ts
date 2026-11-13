@@ -8,6 +8,7 @@ export default defineRailway((ctx) => {
     CELERY_BROKER_URL: ctx.shared.CELERY_BROKER_URL,
     REDIS_KEY_PREFIX: "pns:backend:",
     PNS_CELERY_TASK_TIME_LIMIT_SECONDS: "900",
+    PNS_CELERY_WORKER_CONCURRENCY: "1",
     PNS_CELERY_JOB_DISPATCH_INTERVAL_SECONDS: "30",
     PNS_CELERY_JOB_CLEANUP_HOUR: "3",
     PNS_CELERY_JOB_CLEANUP_MINUTE: "15",
@@ -19,7 +20,7 @@ export default defineRailway((ctx) => {
     source: github("DEZA-CODEX/PNS", { rootDirectory: "backend" }),
     build: "pip install -r requirements.txt",
     start:
-      "celery -A app.celery_app:celery_app worker --loglevel=INFO --concurrency=1 --queues=pns-default,pns-maintenance",
+      "celery -A app.celery_app:celery_app worker --loglevel=INFO --queues=pns-default,pns-maintenance",
     replicas: 1,
     env: sharedEnv,
     deploy: {

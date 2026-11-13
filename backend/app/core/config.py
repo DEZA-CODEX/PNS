@@ -90,6 +90,9 @@ class Settings(BaseSettings):
     celery_task_time_limit_seconds: int = Field(
         default=900, validation_alias="PNS_CELERY_TASK_TIME_LIMIT_SECONDS", gt=0
     )
+    celery_worker_concurrency: int = Field(
+        default=1, validation_alias="PNS_CELERY_WORKER_CONCURRENCY", ge=1, le=16
+    )
     celery_job_dispatch_interval_seconds: int = Field(
         default=30, validation_alias="PNS_CELERY_JOB_DISPATCH_INTERVAL_SECONDS", ge=10
     )
