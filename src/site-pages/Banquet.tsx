@@ -5,7 +5,6 @@ import { ArrowDown, ArrowUpRight, CalendarDays, Cake, Heart, Sparkles, Users } f
 import gsap from "gsap";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/sections/Footer";
-import { Cursor } from "@/components/Cursor";
 import { useReveal } from "@/hooks/useReveal";
 import eventsBanquet from "@/assets/events-banquet.jpg";
 
@@ -63,7 +62,6 @@ export function Banquet() {
 
   return (
     <div className="readable-content min-h-screen bg-background text-foreground">
-      <Cursor />
       <Navbar onBook={openEventEnquiry} />
       <main ref={root}>
         <section className="relative isolate flex min-h-[min(850px,100svh)] items-end overflow-hidden bg-[#051838] px-6 pb-16 pt-36 lg:px-12 lg:pb-24 lg:pt-48">

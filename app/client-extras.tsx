@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { Analytics } from "@vercel/analytics/next";
+import { Cursor } from "@/components/Cursor";
 import { Toaster } from "@/components/ui/sonner";
 
 const Chatbot = dynamic(() => import("@/components/chatbot").then((module) => module.Chatbot), {
@@ -15,6 +16,7 @@ export default function ClientExtras() {
 
   return (
     <>
+      <Cursor />
       {!isAdminRoute && <Chatbot />}
       <Analytics />
       <Toaster position="top-right" />

@@ -20,7 +20,6 @@ import {
 import { useState } from "react";
 
 import { BookingPanel } from "@/components/BookingPanel";
-import { Cursor } from "@/components/Cursor";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/sections/Footer";
 import { heroHotelImage } from "@/data/imageManifest";
@@ -159,7 +158,6 @@ export function AboutUs() {
   const openBooking = () => setBooking(true);
   return (
     <>
-      <Cursor />
       <Navbar onBook={openBooking} />
       <main className="about-page readable-content">
         <section className="about-hero dark-surface" id="top">

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Lenis from "lenis";
-import { Cursor } from "@/components/Cursor";
 import { Navbar } from "@/components/Navbar";
 import { BookingPanel } from "@/components/BookingPanel";
 import { ContactPanel } from "@/components/ContactPanel";
@@ -55,7 +54,6 @@ export function Home({ contactOpen = false }: { contactOpen?: boolean }) {
   }, []);
   return (
     <>
-      <Cursor />
       <Navbar onBook={openBooking} />
       <main ref={root} className="readable-content relative">
         <Hero onBook={openBooking} />

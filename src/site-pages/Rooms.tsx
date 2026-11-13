@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react";
 import { BookingPanel } from "@/components/BookingPanel";
 import { BookingWidget } from "@/home/components/Booking/BookingWidget";
 import type { BookingDetails } from "@/home/components/Booking/BookingWidget";
-import { Cursor } from "@/components/Cursor";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/sections/Footer";
 import { comparisonAmenities, hasAmenity, roomCategories, type Room } from "@/data/rooms";
@@ -174,7 +173,6 @@ export function Rooms() {
 
   return (
     <div className="readable-content bg-background">
-      <Cursor />
       <Navbar onBook={() => openBooking()} />
       <main>
         <section className="dark-surface relative isolate min-h-screen overflow-hidden pb-10 pt-36 lg:pt-44">

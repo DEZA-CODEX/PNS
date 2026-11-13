@@ -96,6 +96,23 @@
     text-rendering: optimizeLegibility;
   }
 
+  .cursor-star {
+    position: fixed;
+    z-index: 9999;
+    top: 0;
+    left: 0;
+    width: 20px;
+    height: 20px;
+    color: #d4af37;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate3d(-100px, -100px, 0) translate(-50%, -50%);
+    transition:
+      transform 110ms cubic-bezier(0.2, 0.7, 0.3, 1),
+      opacity 140ms ease;
+    will-change: transform, opacity;
+  }
+
   h1,
   h2,
   h3 {

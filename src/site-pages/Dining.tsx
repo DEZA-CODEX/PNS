@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, Phone } from "lucide-react";
 import { BookingPanel } from "@/components/BookingPanel";
-import { Cursor } from "@/components/Cursor";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/sections/Footer";
 import type { BookingDetails } from "@/home/components/Booking/BookingWidget";
@@ -201,7 +200,6 @@ export function Dining() {
 
   return (
     <div className="readable-content min-h-screen bg-background">
-      <Cursor />
       <Navbar onBook={() => openBooking()} />
       <main>
         <section className="dining-hero dark-surface relative overflow-hidden px-6 pb-20 pt-40 lg:px-12 lg:pb-28 lg:pt-52">

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { Cursor } from "@/components/Cursor";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/sections/Footer";
 import { BookingPanel } from "@/components/BookingPanel";
@@ -98,7 +97,6 @@ export function Gallery() {
 
   return (
     <div className="readable-content min-h-screen bg-background">
-      <Cursor />
       <Navbar onBook={() => setBooking(true)} />
       <main>
         <section className="gallery-hero dark-surface relative overflow-hidden px-6 pb-16 pt-40 lg:px-12 lg:pb-24 lg:pt-52">
