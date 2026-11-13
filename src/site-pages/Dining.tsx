@@ -169,7 +169,7 @@ export function Dining() {
   const [selectedId, setSelectedId] = useState(diningExperiences[0]!.id);
   const { images: diningImageLibrary, displayCounts } = useDiningImageLibrary();
   const [bookingDetails, setBookingDetails] = useState<BookingDetails>({
-    destination: "",
+    roomTypes: [],
     checkIn: "",
     checkOut: "",
     adults: 2,

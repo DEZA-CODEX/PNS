@@ -24,7 +24,7 @@ export function Home({ contactOpen = false }: { contactOpen?: boolean }) {
   const [booking, setBooking] = useState(false);
   const [contact, setContact] = useState(contactOpen);
   const [bookingDetails, setBookingDetails] = useState<BookingDetails>({
-    destination: "",
+    roomTypes: [],
     checkIn: "",
     checkOut: "",
     adults: 2,

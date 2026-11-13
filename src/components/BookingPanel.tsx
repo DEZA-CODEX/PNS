@@ -1,5 +1,6 @@
 import type { BookingDetails } from "@/home/components/Booking/BookingWidget";
 import { useDialogAccessibility } from "@/hooks/useDialogAccessibility";
+import { ROOM_TYPE_LABELS } from "@/types/roomImages";
 
 export function BookingPanel({
   open,
@@ -44,8 +45,11 @@ export function BookingPanel({
 
         <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div>
-            <p className="eyebrow">Destination</p>
-            <p className="mt-2 text-cream">{details.destination || "Not selected"}</p>
+            <p className="eyebrow">Room types</p>
+            <p className="mt-2 text-cream">
+              {details.roomTypes.map((roomType) => ROOM_TYPE_LABELS[roomType]).join(", ") ||
+                "Not selected"}
+            </p>
           </div>
           <div>
             <p className="eyebrow">Dates</p>

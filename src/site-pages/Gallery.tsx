@@ -64,7 +64,7 @@ export function Gallery() {
   const activeIndex = visibleImages.findIndex((image) => image.id === activeId);
   const activeImage = activeIndex >= 0 ? visibleImages[activeIndex] : null;
   const bookingDetails: BookingDetails = {
-    destination: "",
+    roomTypes: [],
     checkIn: "",
     checkOut: "",
     adults: 2,

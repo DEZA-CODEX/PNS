@@ -12,9 +12,10 @@ import {
   UserRound,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ROOM_TYPE_LABELS, ROOM_TYPES, type RoomType } from "@/types/roomImages";
 
 export type BookingDetails = {
-  destination: string;
+  roomTypes: RoomType[];
   checkIn: string;
   checkOut: string;
   adults: number;
@@ -25,7 +26,7 @@ export type BookingDetails = {
 };
 
 const initialBookingDetails: BookingDetails = {
-  destination: "",
+  roomTypes: [],
   checkIn: "",
   checkOut: "",
   adults: 2,
@@ -46,6 +47,8 @@ export function BookingWidget({
 }) {
   const [details, setDetails] = useState(initialBookingDetails);
   const [occupancyOpen, setOccupancyOpen] = useState(false);
+  const [roomTypeOpen, setRoomTypeOpen] = useState(false);
+  const [roomTypeError, setRoomTypeError] = useState(false);
 
   const updateDetails = <K extends keyof BookingDetails>(field: K, value: BookingDetails[K]) => {
     setDetails((current) => ({ ...current, [field]: value }));
@@ -61,12 +64,30 @@ export function BookingWidget({
     }));
   };
 
+  const toggleRoomType = (roomType: RoomType) => {
+    setDetails((current) => ({
+      ...current,
+      roomTypes: current.roomTypes.includes(roomType)
+        ? current.roomTypes.filter((selectedType) => selectedType !== roomType)
+        : [...current.roomTypes, roomType],
+    }));
+    setRoomTypeError(false);
+  };
+
+  const roomTypeSummary = details.roomTypes
+    .map((roomType) => ROOM_TYPE_LABELS[roomType])
+    .join(", ");
   const occupancySummary = `${details.adults} ${details.adults === 1 ? "adult" : "adults"} · ${details.children} ${details.children === 1 ? "child" : "children"} · ${details.rooms} ${details.rooms === 1 ? "room" : "rooms"}`;
 
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
+        if (details.roomTypes.length === 0) {
+          setRoomTypeError(true);
+          setRoomTypeOpen(true);
+          return;
+        }
         onBook(details);
       }}
       aria-label={showHeading ? "Book your stay" : undefined}
@@ -78,21 +99,61 @@ export function BookingWidget({
         </h2>
       )}
 
-      <label className="flex min-w-0 items-center gap-3 rounded-lg px-4 py-3 transition-colors hover:bg-white/60 focus-within:bg-white/60">
-        <BedDouble className="size-6 shrink-0 text-gold" aria-hidden="true" />
-        <span className="min-w-0 flex-1">
-          <span className="eyebrow block">Enter destination</span>
-          <input
-            required
-            type="text"
-            autoComplete="off"
-            placeholder="Where are you going?"
-            value={details.destination}
-            onChange={(event) => updateDetails("destination", event.target.value)}
-            className="mt-0.5 w-full truncate border-0 bg-transparent p-0 text-sm text-navy outline-none placeholder:text-navy/70 focus:ring-0"
-          />
-        </span>
-      </label>
+      <Popover open={roomTypeOpen} onOpenChange={setRoomTypeOpen}>
+        <div className="min-w-0">
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label={`Select room types${roomTypeSummary ? `: ${roomTypeSummary}` : ""}`}
+              aria-invalid={roomTypeError}
+              aria-describedby={roomTypeError ? "room-type-error" : undefined}
+              className="flex w-full min-w-0 items-center gap-3 rounded-lg px-4 py-3 text-left transition-colors data-[state=closed]:text-black hover:bg-white/60 focus-visible:bg-white/60"
+            >
+              <BedDouble className="size-6 shrink-0 text-gold" aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="eyebrow block">Select room type</span>
+                <span className="mt-0.5 block truncate text-sm text-gold">
+                  {roomTypeSummary || "Choose room types"}
+                </span>
+              </span>
+              <ChevronDown
+                className={`size-4 shrink-0 text-gold transition-transform ${roomTypeOpen ? "rotate-180" : ""}`}
+                aria-hidden="true"
+              />
+            </button>
+          </PopoverTrigger>
+          {roomTypeError && (
+            <p id="room-type-error" role="alert" className="px-4 text-xs text-red-700">
+              Select at least one room type.
+            </p>
+          )}
+        </div>
+        <PopoverContent
+          align="start"
+          sideOffset={10}
+          className="w-[min(90vw,24rem)] rounded-xl border border-navy/15 bg-background p-5 text-navy shadow-xl"
+        >
+          <fieldset className="space-y-3">
+            <legend className="eyebrow mb-3">Choose room types</legend>
+            {ROOM_TYPES.map((roomType) => (
+              <label
+                key={roomType}
+                className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-sm text-navy hover:bg-gold/10"
+              >
+                <input
+                  type="checkbox"
+                  name="roomTypes"
+                  value={roomType}
+                  checked={details.roomTypes.includes(roomType)}
+                  onChange={() => toggleRoomType(roomType)}
+                  className="size-4 accent-gold"
+                />
+                {ROOM_TYPE_LABELS[roomType]}
+              </label>
+            ))}
+          </fieldset>
+        </PopoverContent>
+      </Popover>
 
       <fieldset className="flex min-w-0 items-center gap-3 rounded-lg border-y border-navy/10 px-4 py-3 md:border-x md:border-y-0">
         <legend className="sr-only">Select dates</legend>

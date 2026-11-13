@@ -453,7 +453,7 @@ export function AboutUs() {
       <BookingPanel
         open={booking}
         details={{
-          destination: "",
+          roomTypes: [],
           checkIn: "",
           checkOut: "",
           adults: 2,

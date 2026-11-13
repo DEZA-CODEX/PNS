@@ -129,7 +129,7 @@ export function Rooms() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [booking, setBooking] = useState(false);
   const [bookingDetails, setBookingDetails] = useState<BookingDetails>({
-    destination: "",
+    roomTypes: [],
     checkIn: "",
     checkOut: "",
     adults: 2,
