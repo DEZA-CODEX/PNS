@@ -21,7 +21,7 @@ export function Footer({ onBook }: { onBook: () => void }) {
         alt=""
         aria-hidden="true"
         loading="lazy"
-        className="absolute inset-0 z-0 size-full object-cover object-[center_45%]"
+        className="absolute inset-0 z-0 size-full object-fill"
       />
       <div className="absolute inset-0 z-0 bg-[linear-gradient(180deg,rgba(5,24,56,0.08)_0%,rgba(5,24,56,0.4)_38%,rgba(5,24,56,0.96)_100%)]" />
       <div className="absolute inset-0 z-0 bg-gradient-to-r from-[#051838]/50 via-transparent to-[#051838]/45" />
