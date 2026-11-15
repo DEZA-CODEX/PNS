@@ -170,6 +170,25 @@
   }
 }
 
+@layer components {
+  .navbar-logo-link {
+    display: inline-block;
+    transform: scale(1);
+    transition: transform 300ms ease-out;
+  }
+
+  .navbar-logo-link:hover,
+  .navbar-logo-link:focus-visible {
+    transform: scale(0.96);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .navbar-logo-link {
+      transition: none;
+    }
+  }
+}
+
 @utility eyebrow {
   font-family: var(--font-sans);
   font-size: var(--type-label);
