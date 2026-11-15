@@ -1752,6 +1752,172 @@ def test_storage_requires_backend_configuration(monkeypatch: pytest.MonkeyPatch)
     assert getattr(missing.value, "code", None) == "storage_not_configured"
 
 
+def test_storage_get_treats_no_such_key_as_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        supabase_url="https://project.supabase.co",
+        supabase_secret_key="test-secret",
+        supabase_storage_bucket="pns-images",
+    )
+    monkeypatch.setattr(image_storage, "get_settings", lambda: settings)
+    request_data: dict[str, object] = {}
+
+    async def request(
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        content: bytes | None = None,
+        json: dict | None = None,
+    ) -> httpx.Response:
+        request_data.update(
+            method=method, url=url, headers=headers, content=content, json=json
+        )
+        return httpx.Response(
+            400,
+            json={
+                "statusCode": "404",
+                "error": "not_found",
+                "message": "Object not found",
+                "code": "NoSuchKey",
+            },
+        )
+
+    monkeypatch.setattr(image_storage, "_request", request)
+    result = asyncio.run(image_storage.get_object("uploads/room/vajra/missing.webp"))
+
+    assert result is None
+    assert request_data["method"] == "GET"
+
+
+def test_storage_get_does_not_treat_other_bad_requests_as_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        supabase_url="https://project.supabase.co",
+        supabase_secret_key="test-secret",
+        supabase_storage_bucket="pns-images",
+    )
+    monkeypatch.setattr(image_storage, "get_settings", lambda: settings)
+
+    async def request(
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        content: bytes | None = None,
+        json: dict | None = None,
+    ) -> httpx.Response:
+        _ = method, url, headers, content, json
+        return httpx.Response(400, json={"code": "InvalidKey"})
+
+    monkeypatch.setattr(image_storage, "_request", request)
+    with pytest.raises(Exception) as failed:
+        asyncio.run(image_storage.get_object("uploads/room/vajra/file.webp"))
+
+    assert getattr(failed.value, "code", None) == "storage_error"
+
+
+def test_storage_delete_uses_bucket_remove_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        supabase_url="https://project.supabase.co",
+        supabase_secret_key="test-secret",
+        supabase_storage_bucket="pns-images",
+    )
+    monkeypatch.setattr(image_storage, "get_settings", lambda: settings)
+    request_data: dict[str, object] = {}
+
+    async def request(
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        content: bytes | None = None,
+        json: dict | None = None,
+    ) -> httpx.Response:
+        request_data.update(
+            method=method, url=url, headers=headers, content=content, json=json
+        )
+        return httpx.Response(200, json=[])
+
+    monkeypatch.setattr(image_storage, "_request", request)
+    asyncio.run(image_storage.delete_object("uploads/room/vajra/file.webp"))
+
+    assert request_data["method"] == "DELETE"
+    assert request_data["url"] == "https://project.supabase.co/storage/v1/object/pns-images"
+    assert request_data["json"] == {"prefixes": ["uploads/room/vajra/file.webp"]}
+    assert request_data["headers"]["Authorization"] == "Bearer test-secret"
+    assert request_data["headers"]["Content-Type"] == "application/json"
+
+
+def test_storage_delete_treats_no_such_key_as_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        supabase_url="https://project.supabase.co",
+        supabase_secret_key="test-secret",
+        supabase_storage_bucket="pns-images",
+    )
+    monkeypatch.setattr(image_storage, "get_settings", lambda: settings)
+
+    async def request(
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        content: bytes | None = None,
+        json: dict | None = None,
+    ) -> httpx.Response:
+        _ = method, url, headers, content, json
+        return httpx.Response(
+            400,
+            json={"statusCode": "404", "code": "NoSuchKey"},
+        )
+
+    monkeypatch.setattr(image_storage, "_request", request)
+    asyncio.run(image_storage.delete_object("uploads/room/vajra/missing.webp"))
+
+
+def test_storage_delete_rejects_missing_bucket_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        supabase_url="https://project.supabase.co",
+        supabase_secret_key="test-secret",
+        supabase_storage_bucket="pns-images",
+    )
+    monkeypatch.setattr(image_storage, "get_settings", lambda: settings)
+    request_data: dict[str, object] = {}
+
+    async def request(
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        content: bytes | None = None,
+        json: dict | None = None,
+    ) -> httpx.Response:
+        request_data.update(
+            method=method, url=url, headers=headers, content=content, json=json
+        )
+        return httpx.Response(404)
+
+    monkeypatch.setattr(image_storage, "_request", request)
+    with pytest.raises(Exception) as failed:
+        asyncio.run(image_storage.delete_object("uploads/room/vajra/file.webp"))
+
+    assert getattr(failed.value, "code", None) == "storage_error"
+    assert request_data["method"] == "DELETE"
+
+
 def test_storage_image_delete_verifies_object_then_removes_database_record(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1806,6 +1972,55 @@ def test_storage_image_delete_verifies_object_then_removes_database_record(
         "record_id": "image-id",
         "storage_path": "uploads/room/vajra/room.webp",
         "backup": b"stored image bytes",
+    }
+
+
+def test_storage_image_delete_removes_record_when_object_is_already_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, object]] = []
+    db = type("FakeDatabase", (), {"flush": lambda self: asyncio.sleep(0)})()
+    row = {
+        "source_type": "upload",
+        "has_database_content": False,
+        "storage_path": "uploads/room/vajra/missing.webp",
+    }
+
+    async def get_image(*_args: object) -> dict[str, object] | None:
+        calls.append(("lookup", "image-id"))
+        return row if calls.count(("lookup", "image-id")) == 1 else None
+
+    async def get_object(path: str) -> None:
+        calls.append(("read", path))
+        return None
+
+    async def delete_image(*_args: object) -> bool:
+        calls.append(("delete_record", _args))
+        return True
+
+    async def delete_object(path: str) -> None:
+        calls.append(("delete", path))
+        raise AssertionError("An absent Storage object must not be deleted again.")
+
+    monkeypatch.setattr(image_service, "get_managed_image", get_image)
+    monkeypatch.setattr(image_service, "get_object", get_object)
+    monkeypatch.setattr(image_service, "delete_managed_image_record", delete_image)
+    monkeypatch.setattr(image_service, "delete_object", delete_object)
+    result = asyncio.run(
+        image_service.delete_managed_image(db, "room", "vajra", "image-id")
+    )
+
+    assert calls == [
+        ("lookup", "image-id"),
+        ("read", "uploads/room/vajra/missing.webp"),
+        ("read", "uploads/room/vajra/missing.webp"),
+        ("delete_record", (db, "image-id", "room", "vajra")),
+        ("lookup", "image-id"),
+    ]
+    assert result == {
+        "record_id": "image-id",
+        "storage_path": "uploads/room/vajra/missing.webp",
+        "backup": None,
     }
 
 
