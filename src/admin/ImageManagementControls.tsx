@@ -62,14 +62,25 @@ export function ImageManagementControls({
   const [images, setImages] = useState<ManagedImageRecord[]>([]);
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   const [url, setUrl] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadControllerRef = useRef<AbortController | null>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{
+    current: number;
+    completed: number;
+    uploaded: number;
+    total: number;
+    filename: string;
+    canceling: boolean;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const endpoint = `/admin/${collection}-images`;
+  const previewFile = files[0] ?? null;
 
   useEffect(() => {
     const canvas = previewCanvasRef.current;
@@ -77,9 +88,9 @@ export function ImageManagementControls({
     const context = canvas.getContext("2d");
     if (!context) return;
     context.clearRect(0, 0, canvas.width, canvas.height);
-    if (!file) return;
+    if (!previewFile) return;
     let cancelled = false;
-    void createImageBitmap(file).then((bitmap) => {
+    void createImageBitmap(previewFile).then((bitmap) => {
       if (cancelled) {
         bitmap.close();
         return;
@@ -93,7 +104,7 @@ export function ImageManagementControls({
     return () => {
       cancelled = true;
     };
-  }, [file]);
+  }, [previewFile]);
 
   const requestHeaders = useMemo(() => ({}), []);
 
@@ -122,8 +133,109 @@ export function ImageManagementControls({
   }, [loadImages]);
 
   const resetForm = () => {
-    setFile(null);
+    setFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setUrl("");
+  };
+
+  const cancelUploads = () => {
+    const controller = uploadControllerRef.current;
+    if (!controller) return;
+    setUploadProgress((current) => (current ? { ...current, canceling: true } : current));
+    controller.abort();
+  };
+
+  const uploadSelectedFiles = async (selectedFiles: File[]) => {
+    const controller = new AbortController();
+    uploadControllerRef.current = controller;
+    let uploaded = 0;
+    let canceled = false;
+    const failures: string[] = [];
+
+    for (const [index, selectedFile] of selectedFiles.entries()) {
+      if (controller.signal.aborted) {
+        canceled = true;
+        break;
+      }
+      setUploadProgress({
+        current: index + 1,
+        completed: index,
+        uploaded,
+        total: selectedFiles.length,
+        filename: selectedFile.name,
+        canceling: false,
+      });
+      const form = new FormData();
+      form.set("category", category);
+      form.set("file", selectedFile);
+
+      try {
+        const response = await apiFetch(endpoint, {
+          method: "POST",
+          headers: requestHeaders,
+          body: form,
+          timeoutMs: 120_000,
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120_000)]),
+        });
+        const body = (await response.json()) as {
+          error?: { message?: string };
+          image?: ManagedImageRecord;
+        };
+        if (!response.ok) {
+          throw new Error(body.error?.message ?? "Image could not be uploaded.");
+        }
+        uploaded += 1;
+        const uploadedImage = body.image;
+        if (uploadedImage) {
+          setImages((current) => [
+            ...current.filter((candidate) => candidate.id !== uploadedImage.id),
+            uploadedImage,
+          ]);
+        }
+      } catch (reason: unknown) {
+        if (controller.signal.aborted) {
+          canceled = true;
+          break;
+        }
+        failures.push(
+          `${selectedFile.name}: ${
+            reason instanceof Error ? reason.message : "Image could not be uploaded."
+          }`,
+        );
+      }
+      setUploadProgress({
+        current: index + 1,
+        completed: index + 1,
+        uploaded,
+        total: selectedFiles.length,
+        filename: selectedFile.name,
+        canceling: false,
+      });
+    }
+
+    canceled ||= controller.signal.aborted;
+    setUploadProgress(null);
+    resetForm();
+    if (uploaded > 0 || canceled) {
+      notifyManagedImagesChanged(collection);
+      await loadImages();
+    }
+    if (failures.length > 0) {
+      setError((current) =>
+        [current, `Some images could not be uploaded: ${failures.join("; ")}`]
+          .filter(Boolean)
+          .join(" "),
+      );
+    }
+    if (canceled) {
+      setFeedback(
+        `Upload canceled after ${uploaded} of ${selectedFiles.length} images uploaded. The active image may still finish on the server, so check the image list after it settles.`,
+      );
+    } else if (failures.length > 0) {
+      setFeedback(`Uploaded ${uploaded} of ${selectedFiles.length} images.`);
+    } else {
+      setFeedback(`${uploaded} image${uploaded === 1 ? "" : "s"} uploaded successfully.`);
+    }
   };
 
   const addImage = async () => {
@@ -131,24 +243,15 @@ export function ImageManagementControls({
     setError(null);
     setFeedback(null);
     try {
-      let response: Response;
-      if (file) {
-        const form = new FormData();
-        form.set("category", category);
-        form.set("file", file);
-        response = await apiFetch(endpoint, {
-          method: "POST",
-          headers: requestHeaders,
-          body: form,
-          timeoutMs: 120_000,
-        });
-      } else {
-        response = await apiFetch(endpoint, {
-          method: "POST",
-          headers: { ...requestHeaders, "Content-Type": "application/json" },
-          body: JSON.stringify({ category, imageUrl: url.trim() }),
-        });
+      if (files.length > 0) {
+        await uploadSelectedFiles(files);
+        return;
       }
+      const response = await apiFetch(endpoint, {
+        method: "POST",
+        headers: { ...requestHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ category, imageUrl: url.trim() }),
+      });
       const body = (await response.json()) as {
         error?: { message?: string };
         image?: ManagedImageRecord;
@@ -168,6 +271,8 @@ export function ImageManagementControls({
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "Image could not be added.");
     } finally {
+      uploadControllerRef.current = null;
+      setUploadProgress(null);
       setSaving(false);
     }
   };
@@ -243,7 +348,7 @@ export function ImageManagementControls({
     }
   };
 
-  const canSave = Boolean(file || url.trim()) && !saving;
+  const canSave = Boolean(files.length || url.trim()) && !saving;
 
   return (
     <section
@@ -275,15 +380,20 @@ export function ImageManagementControls({
           <label className="grid gap-1 text-sm text-[#46536b]">
             Upload from computer
             <input
+              ref={fileInputRef}
               type="file"
+              multiple
               accept="image/jpeg,image/png,image/webp,image/avif"
               onChange={(event) => {
-                setFile(event.target.files?.[0] ?? null);
+                setFiles(Array.from(event.currentTarget.files ?? []));
                 setUrl("");
               }}
               disabled={saving}
               className="block w-full rounded-lg border border-[var(--color-border-warm)] bg-white px-3 py-2 text-sm"
             />
+            <span className="text-xs text-[#46536b]">
+              Select multiple images; they upload one at a time in selection order.
+            </span>
           </label>
           <label className="grid gap-1 text-sm text-[#46536b]">
             Add image URL
@@ -292,7 +402,8 @@ export function ImageManagementControls({
               value={url}
               onChange={(event) => {
                 setUrl(event.target.value);
-                setFile(null);
+                setFiles([]);
+                if (fileInputRef.current) fileInputRef.current.value = "";
               }}
               placeholder="https://example.com/image.webp"
               disabled={saving}
@@ -309,6 +420,16 @@ export function ImageManagementControls({
           >
             {saving ? "Saving..." : "Save image"}
           </button>
+          {uploadProgress ? (
+            <button
+              type="button"
+              onClick={cancelUploads}
+              disabled={uploadProgress.canceling}
+              className="rounded-lg border border-red-300 px-4 py-2 text-xs text-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {uploadProgress.canceling ? "Canceling..." : "Cancel uploads"}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={resetForm}
@@ -318,14 +439,30 @@ export function ImageManagementControls({
             Cancel
           </button>
         </div>
-        {file ? (
+        {previewFile ? (
           <div className="sm:col-span-2">
-            <p className="mb-2 text-xs uppercase tracking-[0.12em] text-[#46536b]">Preview</p>
+            <p className="mb-2 text-xs uppercase tracking-[0.12em] text-[#46536b]">
+              Preview of first image in upload order
+            </p>
             <canvas
               ref={previewCanvasRef}
               aria-label="Selected image preview"
               className="h-28 w-44 rounded-lg object-cover"
             />
+            {files.length > 1 ? (
+              <ol
+                aria-label="Image upload order"
+                className="mt-2 max-h-24 list-inside list-decimal overflow-y-auto text-xs text-[#46536b]"
+              >
+                {files.map((selectedFile, index) => (
+                  <li
+                    key={`${index}-${selectedFile.name}-${selectedFile.size}-${selectedFile.lastModified}`}
+                  >
+                    {selectedFile.name}
+                  </li>
+                ))}
+              </ol>
+            ) : null}
           </div>
         ) : url.trim() ? (
           <p className="sm:col-span-2 text-xs text-[#46536b]">
@@ -338,6 +475,38 @@ export function ImageManagementControls({
         <p className="mt-4 text-sm text-[#46536b]" role="status">
           Loading images...
         </p>
+      ) : null}
+      {uploadProgress ? (
+        <div className="mt-4 grid gap-2 text-sm text-[#46536b]" role="status" aria-live="polite">
+          <div className="flex flex-wrap justify-between gap-2">
+            <span>
+              Uploaded {uploadProgress.uploaded} of {uploadProgress.total} images
+            </span>
+            <span>
+              {uploadProgress.completed} of {uploadProgress.total} processed
+            </span>
+          </div>
+          <div
+            className="h-2 w-full overflow-hidden rounded-full bg-[#e6e1d7]"
+            role="progressbar"
+            aria-label="Batch upload progress"
+            aria-valuemin={0}
+            aria-valuemax={uploadProgress.total}
+            aria-valuenow={uploadProgress.completed}
+          >
+            <div
+              className="h-full rounded-full bg-[var(--color-gold)] transition-[width] duration-300 ease-out"
+              style={{
+                width: `${(uploadProgress.completed / uploadProgress.total) * 100}%`,
+              }}
+            />
+          </div>
+          <span>
+            {uploadProgress.canceling
+              ? `Canceling the active upload: ${uploadProgress.filename}.`
+              : `Processing image ${uploadProgress.current} of ${uploadProgress.total}: ${uploadProgress.filename}. The next image starts when this one finishes.`}
+          </span>
+        </div>
       ) : null}
       {error ? (
         <p
