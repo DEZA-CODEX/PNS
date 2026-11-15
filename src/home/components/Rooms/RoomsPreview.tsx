@@ -46,10 +46,9 @@ function RoomPanel({
 
   return (
     <article
-      className={`editorial-carousel-item group relative min-h-[15rem] overflow-hidden border border-gold/40 ${
-        active ? "editorial-carousel-item-active md:col-span-7 md:row-span-2" : "md:col-span-5"
-      }`}
+      className={`editorial-carousel-item group relative min-h-[15rem] overflow-hidden border border-gold/40 bg-ink md:min-h-[20rem] ${active ? "editorial-carousel-item-active md:col-span-6 md:row-span-2" : "md:col-span-6"}`}
       data-active={active}
+      data-room-type={room.id}
       data-home-reveal
       onMouseEnter={onSelect}
       onPointerMove={(event) => setPanelTilt(event.currentTarget, event)}
@@ -76,7 +75,7 @@ function RoomPanel({
           width="1200"
           height="800"
           aria-hidden={index !== activeImageIndex}
-          className={`absolute inset-0 size-full min-h-[15rem] object-cover transition-[opacity,transform] duration-[1200ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04] md:min-h-[25rem] ${
+          className={`absolute inset-0 size-full object-cover object-center transition-[opacity,transform] duration-[1200ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
             index === activeImageIndex ? "opacity-100" : "opacity-0"
           }`}
         />

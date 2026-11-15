@@ -70,7 +70,7 @@ export const nearby = [
   { place: "CMC Vellore", distance: "2.4 km" },
   { place: "VIT University", distance: "8.1 km" },
   { place: "Vellore Fort", distance: "6.9 km" },
-  { place: "Golden Temple, Sripuram", distance: "11.2 km" },
+  { place: "Golden Temple, Sripuram", distance: "20.0km" },
 ];
 
 export const eventsImage = eventsBanquet.src;

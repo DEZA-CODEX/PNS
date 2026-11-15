@@ -723,6 +723,14 @@
   .editorial-carousel-item-active {
     min-height: 30rem;
   }
+
+  .editorial-carousel-rooms .editorial-carousel-item:not([data-room-type="vajra"]) {
+    min-height: 29rem;
+  }
+
+  .editorial-carousel-rooms .editorial-carousel-item-active:not([data-room-type="vajra"]) {
+    min-height: 34rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

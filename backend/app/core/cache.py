@@ -58,13 +58,26 @@ async def _redis_call(
     client = get_redis()
     if client is None:
         return fallback
+    timeout = get_settings().redis_timeout_seconds
     try:
         return await asyncio.wait_for(
             callback(client),
-            timeout=get_settings().redis_timeout_seconds,
+            timeout=timeout,
         )
-    except (UpstashError, httpx.HTTPError, OSError, TimeoutError):
-        logger.warning("Redis %s failed; continuing without cache.", operation, exc_info=True)
+    except TimeoutError:
+        logger.warning(
+            "Redis %s timed out after %.2f seconds; continuing without cache.",
+            operation,
+            timeout,
+        )
+        return fallback
+    except (UpstashError, httpx.HTTPError, OSError) as error:
+        logger.warning(
+            "Redis %s failed (%s); continuing without cache.",
+            operation,
+            type(error).__name__,
+        )
+        logger.debug("Redis %s failure details.", operation, exc_info=True)
         return fallback
 
 

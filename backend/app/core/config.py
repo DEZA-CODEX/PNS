@@ -92,7 +92,7 @@ class Settings(BaseSettings):
     redis_default_ttl: int = Field(default=60, validation_alias="REDIS_DEFAULT_TTL", gt=0)
     redis_enabled: bool = Field(default=True, validation_alias="REDIS_ENABLED")
     redis_timeout_seconds: float = Field(
-        default=2.5, validation_alias="PNS_REDIS_TIMEOUT_SECONDS", gt=0, le=10
+        default=5.0, validation_alias="PNS_REDIS_TIMEOUT_SECONDS", gt=0, le=10
     )
     image_cache_ttl_seconds: int = Field(
         default=300, validation_alias="PNS_IMAGE_CACHE_TTL_SECONDS", gt=0

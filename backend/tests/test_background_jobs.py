@@ -486,7 +486,7 @@ def test_worker_removes_only_namespaced_image_cache_keys() -> None:
     assert all(pattern.startswith("pns:backend:images:") for pattern in client.patterns)
 
 
-def test_cache_timeout_falls_back_without_failing_the_request(monkeypatch) -> None:
+def test_cache_timeout_falls_back_without_failing_the_request(monkeypatch, caplog) -> None:
     monkeypatch.setattr(cache, "get_redis", lambda: object())
     monkeypatch.setattr(
         cache,
@@ -497,8 +497,12 @@ def test_cache_timeout_falls_back_without_failing_the_request(monkeypatch) -> No
     async def slow_read(_client):
         await asyncio.sleep(1)
 
-    result = asyncio.run(cache._redis_call("read", slow_read, "database-fallback"))
+    with caplog.at_level("WARNING", logger="pns.cache"):
+        result = asyncio.run(cache._redis_call("read", slow_read, "database-fallback"))
+
     assert result == "database-fallback"
+    assert "Redis read timed out after 0.01 seconds" in caplog.text
+    assert "Traceback" not in caplog.text
 
 
 def test_cache_http_transport_error_uses_fallback(monkeypatch) -> None:
