@@ -9,6 +9,7 @@ import type { BookingDetails } from "@/home/components/Booking/BookingWidget";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/sections/Footer";
 import { comparisonAmenities, hasAmenity, roomCategories, type Room } from "@/data/rooms";
+import { DEFAULT_ROOM_IMAGE_FIT, getRoomImageFit } from "@/data/roomImageFitConfig";
 import { useRoomImages } from "@/hooks/useRoomImages";
 import type { RoomImage } from "@/types/roomImages";
 
@@ -27,6 +28,7 @@ function RoomStage({
   const [failedImageId, setFailedImageId] = useState<string | null>(null);
   const activeImages = images.filter((image) => image.roomType === rooms[activeIndex]?.id);
   const activeImage = activeImages[activeImageIndex % Math.max(activeImages.length, 1)];
+  const imageFit = activeImage ? getRoomImageFit(activeImage.storageKey) : DEFAULT_ROOM_IMAGE_FIT;
 
   useEffect(() => {
     setActiveImageIndex(0);
@@ -42,35 +44,43 @@ function RoomStage({
 
   return (
     <div className="relative h-[min(75vw,42rem)] min-h-[22rem] w-full overflow-hidden [perspective:1200px] lg:sticky lg:top-28">
-      {activeImage && failedImageId !== activeImage.id ? (
-        <img
-          key={activeImage.id}
-          src={activeImage.url}
-          alt={activeImage.altText}
-          width="1200"
-          height="900"
-          loading="eager"
-          fetchPriority="high"
-          onError={() => {
-            setFailedImageId(activeImage.id);
-            if (process.env.NODE_ENV === "development") {
-              console.error(
-                `Room image failed to load (${activeImage.roomType}/${activeImage.filename}): ${activeImage.url}`,
-              );
-            }
-          }}
-          className="absolute inset-0 size-full object-cover transition-[opacity,transform] duration-1000 ease-out"
-        />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center bg-[radial-gradient(circle_at_75%_35%,rgba(207,140,85,0.18),transparent_34%),linear-gradient(120deg,#051838_0%,#051838_100%)] text-center text-sm text-cream/75">
-          {process.env.NODE_ENV === "development"
-            ? `No valid Rooms page image is selected for ${rooms[activeIndex]?.name ?? "this room"}.`
-            : null}
-        </div>
-      )}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/60 via-transparent to-transparent" />
-      <div className="pointer-events-none absolute inset-[8%] rounded-full border border-gold/50 opacity-75" />
-      <div className="pointer-events-none absolute inset-x-10 bottom-8 flex justify-between border-t border-gold/50 pt-3 text-[0.65rem] uppercase tracking-[0.2em] text-cream/80">
+      <div className="absolute inset-0 overflow-hidden rounded-full bg-[#051838]">
+        {activeImage && failedImageId !== activeImage.id ? (
+          <img
+            key={activeImage.id}
+            src={activeImage.url}
+            alt={activeImage.altText}
+            width="1200"
+            height="900"
+            loading="eager"
+            fetchPriority="high"
+            onError={() => {
+              setFailedImageId(activeImage.id);
+              if (process.env.NODE_ENV === "development") {
+                console.error(
+                  `Room image failed to load (${activeImage.roomType}/${activeImage.filename}): ${activeImage.url}`,
+                );
+              }
+            }}
+            className="absolute inset-0 size-full transition-[opacity,transform] duration-1000 ease-out"
+            style={{
+              objectFit: imageFit.fitMode,
+              objectPosition: `${imageFit.positionX}% ${imageFit.positionY}%`,
+              transform: `scale(${imageFit.zoom})`,
+              transformOrigin: `${imageFit.positionX}% ${imageFit.positionY}%`,
+            }}
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center bg-[radial-gradient(circle_at_75%_35%,rgba(207,140,85,0.18),transparent_34%),linear-gradient(120deg,#051838_0%,#051838_100%)] px-8 text-center text-sm text-cream/75">
+            {process.env.NODE_ENV === "development"
+              ? `No valid Rooms page image is selected for ${rooms[activeIndex]?.name ?? "this room"}.`
+              : null}
+          </div>
+        )}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/60 via-transparent to-transparent" />
+      </div>
+      <div className="pointer-events-none absolute inset-0 rounded-full border border-gold/50 opacity-75" />
+      <div className="pointer-events-none absolute inset-x-[20%] bottom-[21%] z-10 flex justify-between border-t border-gold/50 pt-3 text-[0.65rem] uppercase tracking-[0.2em] text-cream/80">
         <span>{rooms[activeIndex]?.name} room study</span>
         <span>0{activeIndex + 1} / 05</span>
       </div>

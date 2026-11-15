@@ -11,7 +11,7 @@ export function AboutPreview() {
           Considered stay in<span className="italic text-gold">Vellore.</span>
         </h2>
       </div>
-      <div data-home-reveal className="lg:col-start-2 lg:row-start-1 lg:w-[130%]">
+      <div data-home-reveal className="min-w-0 lg:col-start-2 lg:row-start-1">
         <div className="overflow-hidden border border-border">
           <img
             src={heroHotel.src}

@@ -7,14 +7,37 @@ import { diningImageRepository } from "@/services/roomImageRepository";
 import { gallery } from "@/home/data/homeData";
 
 type GalleryPreviewItem =
-  | { kind: "vajra-carousel"; id: string; images: RoomImage[]; label: string }
+  | {
+      kind: "vajra-carousel";
+      id: string;
+      images: RoomImage[];
+      label: string;
+      title: string;
+      category: string;
+    }
   | {
       kind: "image";
       id: string;
       src: string;
       label: string;
+      title: string;
+      category: string;
       source: "room" | "dining" | "static";
     };
+
+function getGalleryPreviewLayout(index: number, itemCount: number) {
+  if (itemCount === 1) return "lg:col-span-12";
+  if (index === 0) return "lg:col-span-7 lg:row-span-2";
+  if (index === 1) {
+    return itemCount === 2 ? "lg:col-span-5 lg:row-span-2" : "lg:col-span-5";
+  }
+  if (index === 2) return "lg:col-span-5";
+
+  const remainingItems = itemCount - 3;
+  if (remainingItems === 1) return "lg:col-span-12";
+  if (remainingItems === 2) return "lg:col-span-6";
+  return "lg:col-span-4";
+}
 
 function VajraRoomCarousel({ images }: { images: RoomImage[] }) {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -80,6 +103,8 @@ export function GalleryPreview() {
             id: "vajra-room-carousel",
             images: vajraImages,
             label: `${ROOM_TYPE_LABELS.vajra} room`,
+            title: ROOM_TYPE_LABELS.vajra,
+            category: "ROOM",
           },
         ]
       : []),
@@ -91,6 +116,8 @@ export function GalleryPreview() {
         id: image.id,
         src: image.url,
         label: `${ROOM_TYPE_LABELS[image.roomType]} room`,
+        title: ROOM_TYPE_LABELS[image.roomType],
+        category: "ROOM",
         source: "room" as const,
       })),
   ];
@@ -101,12 +128,16 @@ export function GalleryPreview() {
       id: image.id,
       src: image.url,
       label: `${DINING_TYPE_LABELS[image.diningType]} dining`,
+      title: DINING_TYPE_LABELS[image.diningType],
+      category: "DINING",
       source: "dining" as const,
     })),
     ...gallery.map((item) => ({
       kind: "image" as const,
       ...item,
       id: item.label,
+      title: item.label,
+      category: "SPACES",
       source: "static" as const,
     })),
   ];
@@ -117,28 +148,18 @@ export function GalleryPreview() {
         <h2 className="font-display text-[clamp(2.5rem,6vw,5.2rem)] text-cream" data-home-reveal>
           See the spaces.
         </h2>
-        <div className="mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-12">
+        <div
+          className="mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:auto-rows-[16rem] lg:grid-cols-12 lg:gap-4"
+          data-home-reveal
+        >
           {previewItems.map((item, index) => (
             <figure
               key={item.id}
-              className={`group ${
-                index === 0
-                  ? "lg:col-span-7"
-                  : index === 1
-                    ? "sm:col-span-1 lg:col-span-5 lg:mt-16"
-                    : index === 2
-                      ? "sm:col-span-1 lg:col-span-4"
-                      : index === 3
-                        ? "sm:col-span-1 lg:col-span-4 lg:mt-16"
-                        : "sm:col-span-1 lg:col-span-4"
-              }`}
-              data-home-reveal
+              className={`group relative min-w-0 overflow-hidden ${
+                index === 0 ? "aspect-[16/8]" : index === 1 ? "aspect-[4/5]" : "aspect-[4/3]"
+              } sm:aspect-[4/3] lg:aspect-auto ${getGalleryPreviewLayout(index, previewItems.length)}`}
             >
-              <div
-                className={`relative overflow-hidden bg-[#051838]/5 ${
-                  index === 0 ? "aspect-[16/8]" : index === 1 ? "aspect-[4/5]" : "aspect-[4/3]"
-                }`}
-              >
+              <div className="absolute inset-0 overflow-hidden bg-[#051838]/5">
                 {item.kind === "vajra-carousel" ? (
                   <VajraRoomCarousel images={item.images} />
                 ) : (
@@ -157,7 +178,16 @@ export function GalleryPreview() {
                   />
                 )}
               </div>
-              <figcaption className="eyebrow mt-4">{item.label}</figcaption>
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-t from-ink/90 via-ink/15 to-transparent"
+              />
+              <figcaption className="pointer-events-none absolute inset-x-6 bottom-6 z-20 md:inset-x-8 md:bottom-8">
+                <p className="eyebrow text-gold">{item.category}</p>
+                <h3 className="mt-2 font-display text-4xl leading-none text-[var(--color-ivory)] md:text-5xl">
+                  {item.title}
+                </h3>
+              </figcaption>
             </figure>
           ))}
         </div>

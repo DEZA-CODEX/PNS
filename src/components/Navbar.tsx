@@ -35,7 +35,6 @@ const roomLinks = roomCategories.map((room) => ({
 }));
 
 const banquetLinks = [
-  
   { label: "Tamara", href: "/banquet#halls", description: "Grand celebrations" },
   { label: "Tavisha", href: "/banquet#halls", description: "Gather beautifully" },
   { label: "Titiksha", href: "/banquet#halls", description: "Meet and connect" },
@@ -70,7 +69,7 @@ export function Navbar({ onBook }: { onBook: () => void }) {
       }`}
     >
       <nav className="flex w-full items-center justify-between px-[clamp(1rem,3vw,2rem)]">
-        <a href="#top" className="leading-none" data-cursor="Home">
+        <a href="#top" className="navbar-logo-link leading-none" data-cursor="Home">
           <picture>
             <source srcSet={logoWebp.src} type="image/webp" />
             <img

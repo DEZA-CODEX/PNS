@@ -16,7 +16,7 @@ export default function ClientExtras() {
 
   return (
     <>
-      <Cursor />
+      {!isAdminRoute && <Cursor />}
       {!isAdminRoute && <Chatbot />}
       <Analytics />
       <Toaster position="top-right" />

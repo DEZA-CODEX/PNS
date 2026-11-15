@@ -89,11 +89,7 @@ const attractions = [
     "Situated within the Vellore Fort complex, this temple is an impressive example of traditional Dravidian architecture and craftsmanship.",
     eventsBanquet.src,
   ],
-  [
-    "JALAGAMPARAI WATERFALLS",
-    "Located in the surrounding hill region, the waterfalls provide a scenic getaway into the natural beauty around Vellore.",
-    roomPremier.src,
-  ],
+,
 ] as const;
 
 const nearby = [
@@ -101,10 +97,9 @@ const nearby = [
   ["CMC Ranipet Campus", "6.4 km"],
   ["VIT Campus", "8.1 km"],
   ["Vellore Fort", "6.9 km"],
-  ["Golden Temple", "11.2 km"],
-  ["Jalagamparai Waterfalls", "3.8 km"],
-  ["Jalakandeswarar Temple", "3.9 km"],
-  ["Sri Selva Vinayagar Temple", "5.5 km"],
+
+  ["Jalakandeswarar Temple", "7.1 km"],
+  ["Sri Selva Vinayagar Temple", "10.0 km"],
 ];
 const services = [
   [

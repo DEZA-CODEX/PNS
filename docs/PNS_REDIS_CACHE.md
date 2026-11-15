@@ -35,7 +35,7 @@ FastAPI cache settings:
 - Celery broker: `CELERY_BROKER_URL` (or `REDIS_URL` / `REDIS_KV_URL`)
 - `REDIS_KEY_PREFIX` (default `pns:backend:`)
 - `REDIS_ENABLED` (default `true`)
-- `PNS_REDIS_TIMEOUT_SECONDS` (default `2.5`)
+- `PNS_REDIS_TIMEOUT_SECONDS` (default `5.0`; maximum `10`)
 - `PNS_IMAGE_CACHE_TTL_SECONDS` (default `300`)
 
 Check the health endpoint and backend logs for Redis degradation. A miss or Redis outage must still reach PostgreSQL. Verify the protocol broker URL separately for Celery; the broker's command compatibility was not externally tested.
