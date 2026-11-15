@@ -89,7 +89,6 @@ const attractions = [
     "Situated within the Vellore Fort complex, this temple is an impressive example of traditional Dravidian architecture and craftsmanship.",
     eventsBanquet.src,
   ],
-,
 ] as const;
 
 const nearby = [
