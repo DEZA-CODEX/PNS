@@ -114,6 +114,16 @@ def _storage_failure(response: httpx.Response | None, operation: str) -> ImageMa
     return ImageManagementError("storage_error", message, 502)
 
 
+def _is_no_such_key(response: httpx.Response) -> bool:
+    if response.status_code not in {400, 404}:
+        return False
+    try:
+        payload = response.json()
+    except ValueError:
+        return False
+    return isinstance(payload, dict) and payload.get("code") == "NoSuchKey"
+
+
 async def _request(
     method: str,
     url: str,
@@ -137,7 +147,7 @@ async def get_object(path: str) -> bytes | None:
     response = await _request(
         "GET", _object_endpoint(config, path), headers=_headers(config)
     )
-    if response.status_code == 404:
+    if response.status_code == 404 or _is_no_such_key(response):
         return None
     if response.status_code != 200:
         raise _storage_failure(response, "object retrieval")
@@ -251,9 +261,19 @@ async def upload_object(path: str, data: bytes, *, upsert: bool = False) -> str:
 async def delete_object(path: str) -> None:
     config = _storage_settings()
     response = await _request(
-        "DELETE", _object_endpoint(config, path), headers=_headers(config)
+        "DELETE",
+        f"{config.base_url}/storage/v1/object/{quote(config.bucket, safe='')}",
+        headers=_headers(config, content_type="application/json"),
+        json={"prefixes": [path]},
     )
-    if response.status_code not in {200, 204, 404}:
+    if _is_no_such_key(response):
+        logger.info(
+            "Supabase Storage image object was already absent (bucket=%s, path=%s).",
+            config.bucket,
+            path,
+        )
+        return
+    if response.status_code not in {200, 204}:
         raise _storage_failure(response, "object deletion")
     logger.info(
         "Deleted Supabase Storage image object (bucket=%s, path=%s).",
