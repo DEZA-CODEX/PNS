@@ -994,24 +994,10 @@
   padding: 8rem clamp(1.5rem, 7vw, 7rem) 6rem;
 }
 
-.about-hero-index {
-  position: absolute;
-  right: clamp(1.5rem, 5vw, 5rem);
-  bottom: 2rem;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.about-hero-index span {
-  width: 4rem;
-  height: 1px;
-  background: var(--gold);
-}
 .about-section {
   max-width: 1440px;
   margin: 0 auto;
-  padding: clamp(5rem, 11vw, 10rem) clamp(1.5rem, 6vw, 6rem);
+  padding: clamp(4rem, 7vw, 7rem) clamp(1.5rem, 6vw, 6rem);
 }
 .about-dark {
   max-width: none;
@@ -1019,28 +1005,10 @@
   padding-left: max(clamp(1.5rem, 6vw, 6rem), calc((100vw - 1440px) / 2));
   background: var(--ink);
 }
-.about-kicker {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: clamp(2.5rem, 6vw, 5rem);
-}
-.about-kicker > span {
-  color: var(--gold);
-  font-family: var(--font-display);
-  font-size: 1.4rem;
-}
-.about-kicker::after {
-  content: "";
-  width: 3rem;
-  height: 1px;
-  background: var(--gold);
-  opacity: 0.7;
-}
 .about-title {
   color: var(--ink);
   font-family: var(--font-display);
-  font-size: clamp(2.8rem, 6vw, 6.5rem);
+  font-size: clamp(2.8rem, 4.5vw, 5.2rem);
   line-height: 0.92;
   letter-spacing: -0.025em;
 }
@@ -1052,12 +1020,41 @@
 .contact-grid {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: clamp(2.5rem, 8vw, 9rem);
+  gap: clamp(2.5rem, 5vw, 5.5rem);
+}
+.about-story-title {
+  text-wrap: nowrap;
+}
+.about-comfort-title {
+  font-size: clamp(3.4rem, 5.2vw, 6.2rem);
+}
+.about-story-title span,
+.about-story-title i {
+  display: block;
+  white-space: nowrap;
+}
+.about-story-copy {
+  padding-top: 0.25rem;
+}
+.about-story-copy p {
+  text-align: justify;
+  text-justify: inter-word;
+}
+.about-accommodation .about-story-grid,
+.about-amenities .about-story-grid {
+  align-items: center;
+}
+.about-accommodation-heading {
+  margin-top: clamp(1.5rem, 3vw, 3rem);
+  text-align: left;
+}
+.about-amenities-heading {
+  text-align: left;
 }
 .about-image-strip {
   position: relative;
   min-height: clamp(18rem, 45vw, 34rem);
-  margin-top: clamp(4rem, 9vw, 8rem);
+  margin-top: clamp(3rem, 5vw, 5rem);
   overflow: hidden;
   border: 1px solid color-mix(in oklab, var(--gold) 35%, transparent);
 }
@@ -1207,6 +1204,9 @@
   grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
   gap: clamp(3rem, 10vw, 10rem);
 }
+.about-nearby-title {
+  font-size: clamp(3.4rem, 5.4vw, 6.4rem);
+}
 .nearby-pin {
   display: inline-flex;
   align-items: center;
@@ -1222,7 +1222,7 @@
 }
 .nearby-list > div {
   display: grid;
-  grid-template-columns: 2.5rem 1fr auto;
+  grid-template-columns: 1fr auto;
   gap: 1rem;
   align-items: center;
   min-height: 4rem;
@@ -1260,12 +1260,21 @@
 }
 
 @media (max-width: 800px) {
+  .about-section {
+    padding-top: 4rem;
+    padding-bottom: 4rem;
+  }
   .about-story-grid,
   .about-feature-grid,
   .contact-grid,
   .nearby-layout {
     grid-template-columns: 1fr;
     gap: 2.5rem;
+  }
+  .about-story-title,
+  .about-story-title span,
+  .about-story-title i {
+    white-space: normal;
   }
   .facility-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1286,6 +1295,12 @@
   .about-title {
     font-size: clamp(2.7rem, 13vw, 4rem);
   }
+  .about-nearby-title {
+    font-size: clamp(3.2rem, 14vw, 4.4rem);
+  }
+  .about-comfort-title {
+    font-size: clamp(3.2rem, 14vw, 4.2rem);
+  }
   .facility-grid,
   .attraction-grid,
   .amenities-grid,
@@ -1296,7 +1311,7 @@
     min-height: 12rem;
   }
   .nearby-list > div {
-    grid-template-columns: 2rem 1fr auto;
+    grid-template-columns: 1fr auto;
     gap: 0.5rem;
     font-size: 0.85rem;
   }

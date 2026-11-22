@@ -1,6 +1,5 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import {
   Accessibility,
   AirVent,
@@ -31,11 +30,6 @@ import clinqLounge from "@/assets/clinq-lounge.jpg";
 import eventsBanquet from "@/assets/events-banquet.jpg";
 import { useAboutImages } from "@/hooks/useAboutImages";
 import { diningImageRepository, getSelectedDiningImages } from "@/services/roomImageRepository";
-
-const AboutScene = dynamic(() => import("@/three/AboutScene"), {
-  ssr: false,
-  loading: () => <div className="absolute inset-0 bg-[var(--hero-overlay)]" />,
-});
 
 const facilities = [
   ["VRINDAVAN", "Fine Vegetarian Restaurant", diningVrindavan.src],
@@ -156,7 +150,12 @@ export function AboutUs() {
       <main className="about-page readable-content">
         <section className="about-hero dark-surface" id="top">
           <div className="about-hero-scene" aria-hidden="true">
-            <AboutScene />
+            <img
+              src={diningCloud9.src}
+              alt=""
+              className="h-full w-full object-cover"
+              loading="eager"
+            />
           </div>
           <div className="about-hero-shade" />
           <div className="about-hero-copy">
@@ -169,32 +168,24 @@ export function AboutUs() {
               warmth of Vellore.
             </p>
             <div className="mt-9 flex flex-wrap gap-3">
-              <button onClick={openBooking} className="luxury-button luxury-button-hover px-6 py-3">
-                Book your stay
-              </button>
               <a href="#welcome" className="luxury-button-ghost px-6 py-3 text-cream">
                 Explore the hotel
               </a>
+              <button onClick={openBooking} className="luxury-button luxury-button-hover px-6 py-3">
+                Book your stay
+              </button>
             </div>
           </div>
-          <p className="about-hero-index eyebrow text-cream">
-            01 <span /> 12
-          </p>
         </section>
         <section className="about-section about-story" id="welcome">
-          <div className="about-kicker">
-            <span>01</span>
-            <p className="eyebrow">Welcome to PNS Nakshatra</p>
-          </div>
           <div className="about-story-grid">
             <div>
-              <h2 className="about-title">
-                A considered stay,
-                <br />
+              <h2 className="about-title about-story-title">
+                <span>A considered stay,</span>
                 <i>made personal.</i>
               </h2>
             </div>
-            <div className="space-y-5 text-lg text-muted-foreground">
+            <div className="about-story-copy space-y-5 text-lg text-muted-foreground">
               <p>
                 Hotel PNS Nakshatra is a contemporary 3-star luxury hotel situated in the vibrant
                 city of Vellore. Established with a vision to provide an unparalleled hospitality
@@ -219,17 +210,13 @@ export function AboutUs() {
             />
             <div>
               <span className="eyebrow">Vellore · Tamil Nadu</span>
-              <p className="mt-2 font-display text-3xl text-cream">
+              <p className="mt-2 font-display text-3xl text-gold">
                 A quiet landmark on the highway.
               </p>
             </div>
           </div>
         </section>
         <section className="about-section about-experience">
-          <div className="about-kicker">
-            <span>02</span>
-            <p className="eyebrow">Great stay experience at PNS Nakshatra</p>
-          </div>
           <div className="about-feature-grid">
             <img
               src={roomPremier.src}
@@ -238,7 +225,7 @@ export function AboutUs() {
             />
             <div className="about-feature-copy">
               <p className="eyebrow text-gold">Vajra Premium Rooms</p>
-              <h2 className="about-title">
+              <h2 className="about-title about-comfort-title mt-8">
                 Naturally comfortable
                 <br />
                 <i>private spaces.</i>
@@ -258,12 +245,8 @@ export function AboutUs() {
           </div>
         </section>
         <section className="about-section about-accommodation">
-          <div className="about-kicker">
-            <span>03</span>
-            <p className="eyebrow">Experience luxury and comfort</p>
-          </div>
           <div className="about-story-grid">
-            <h2 className="about-title">
+            <h2 className="about-title about-accommodation-heading">
               Elegant accommodations
               <br />
               <i>for every traveler.</i>
@@ -288,10 +271,6 @@ export function AboutUs() {
           </div>
         </section>
         <section className="about-section about-dark dark-surface" id="facilities">
-          <div className="about-kicker">
-            <span>04</span>
-            <p className="eyebrow text-gold">Hotel facilities</p>
-          </div>
           <h2 className="about-title text-gold">
             <span style={{ color: "#FFFFFF" }}>Spaces with a</span>
             <br />
@@ -334,12 +313,8 @@ export function AboutUs() {
           </div>
         </section>
         <section className="about-section about-amenities">
-          <div className="about-kicker">
-            <span>05</span>
-            <p className="eyebrow">Room amenities</p>
-          </div>
           <div className="about-story-grid">
-            <h2 className="about-title">
+            <h2 className="about-title about-amenities-heading">
               Everything in its
               <br />
               <i>right place.</i>
@@ -355,10 +330,6 @@ export function AboutUs() {
           </div>
         </section>
         <section className="about-section about-services about-dark dark-surface">
-          <div className="about-kicker">
-            <span>06</span>
-            <p className="eyebrow text-gold">Discover our services & facilities</p>
-          </div>
           <h2 className="about-title text-cream">
             <span style={{ color: "#FFFFFF" }}>Care that arrives</span>
             <br />
@@ -378,13 +349,9 @@ export function AboutUs() {
           </div>
         </section>
         <section className="about-section about-vellore">
-          <div className="about-kicker">
-            <span>07</span>
-            <p className="eyebrow">Explore Vellore</p>
-          </div>
           <div className="about-story-grid">
             <div>
-              <h2 className="about-title">
+              <h2 className="about-title about-nearby-title">
                 Discover the places
                 <br />
                 <i>around PNS Nakshatra.</i>
@@ -413,10 +380,6 @@ export function AboutUs() {
           </div>
         </section>
         <section className="about-section about-nearby">
-          <div className="about-kicker">
-            <span>08</span>
-            <p className="eyebrow">Nearby attractions</p>
-          </div>
           <div className="nearby-layout">
             <div>
               <h2 className="about-title">
@@ -430,9 +393,8 @@ export function AboutUs() {
               </div>
             </div>
             <div className="nearby-list">
-              {nearby.map(([place, distance], index) => (
+              {nearby.map(([place, distance]) => (
                 <div key={place}>
-                  <span className="eyebrow text-gold">0{index + 1}</span>
                   <span>{place}</span>
                   <strong>{distance}</strong>
                 </div>
