@@ -8,7 +8,7 @@ export function AboutPreview() {
     >
       <div data-home-reveal className="lg:row-start-1 lg:self-center">
         <h2 className="font-display text-left text-[clamp(2.6rem,6vw,5.5rem)] leading-none text-cream">
-          Considered stay in<span className="italic text-gold">Vellore.</span>
+         A Considered stay in<span className="italic text-gold">Vellore.</span>
         </h2>
       </div>
       <div data-home-reveal className="min-w-0 lg:col-start-2 lg:row-start-1">
