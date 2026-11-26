@@ -1022,6 +1022,9 @@
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   gap: clamp(2.5rem, 5vw, 5.5rem);
 }
+.about-story-intro {
+  gap: clamp(3.5rem, 7vw, 7rem);
+}
 .about-story-title {
   text-wrap: nowrap;
 }

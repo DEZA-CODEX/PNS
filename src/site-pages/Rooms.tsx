@@ -188,14 +188,14 @@ export function Rooms() {
         <section className="dark-surface relative isolate min-h-screen overflow-hidden pb-10 pt-36 lg:pt-44">
           <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_75%_35%,rgba(207,140,85,0.18),transparent_34%),linear-gradient(120deg,#051838_0%,#051838_58%,#051838_100%)]" />
           <div className="mx-auto grid max-w-[1440px] items-center gap-10 px-6 lg:grid-cols-[0.75fr_1.25fr] lg:px-12">
-            <div className="relative z-10">
-              <p className="eyebrow text-gold">Our accommodations</p>
-              <h1 className="mt-5 font-display text-[clamp(4rem,10vw,10rem)] leading-[0.8] text-white">
+            <div className="relative z-10 flex w-full flex-col items-start text-left">
+              <p className="eyebrow block w-full text-left text-gold">Our accommodations</p>
+              <h1 className="mt-5 block w-full text-left font-display text-[clamp(4rem,10vw,10rem)] leading-[0.8] text-white">
                 Stay
                 <br />
-                <span className="italic text-gold">with us.</span>
+                <span className="block text-left italic text-gold">with us.</span>
               </h1>
-              <p className="italic text-gold">
+              <p className="mt-6 block w-full max-w-lg text-left italic text-gold">
                 Spend your comfortable stay in the heart of beautiful Vellore.
               </p>
               <a
@@ -232,9 +232,9 @@ export function Rooms() {
         <section id="rooms" className="dark-surface bg-ink px-6 py-24 lg:px-12 lg:py-32">
           <div className="mx-auto max-w-[1400px]">
             <div className="mb-10 max-w-xl">
-              <p className="italic text-gold">The room collection</p>
-              <h2 className="mt-4 font-display text-5xl text-gold lg:text-7xl">
-                Find your <span className="italic text-gold">space.</span>
+              <p className="italic text-white">The room collection</p>
+              <h2 className="mt-4 font-display text-5xl text-white lg:text-7xl">
+                Find your <span className="italic text-white">space.</span>
               </h2>
             </div>
             <div ref={showcase} className="grid gap-8 lg:grid-cols-[0.88fr_1.12fr] lg:gap-16">
@@ -290,11 +290,11 @@ export function Rooms() {
 
         <section className="dark-surface bg-ink px-6 py-28 lg:px-12 lg:py-40">
           <div className="mx-auto max-w-[1100px] text-center">
-            <p className="eyebrow text-gold">Your stay, your space</p>
-            <h2 className="mt-5 font-display text-[clamp(3rem,8vw,8rem)] leading-[0.84] text-gold">
-              Choose how you <span className="italic text-gold">stay.</span>
+            <p className="eyebrow text-white">Your stay, your space</p>
+            <h2 className="mt-5 font-display text-[clamp(3rem,8vw,8rem)] leading-[0.84] text-white">
+              Choose how you <span className="italic text-white">stay.</span>
             </h2>
-            <p className="mx-auto mt-7 max-w-xl text-base leading-relaxed text-cream/75">
+            <p className="mx-auto mt-7 max-w-xl text-base leading-relaxed text-white">
               Choose the accommodation that fits your journey and experience comfort, convenience
               and refined hospitality at Hotel PNS Nakshatra.
             </p>

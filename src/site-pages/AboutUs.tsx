@@ -167,7 +167,7 @@ export function AboutUs() {
               Experience the ultimate in comfort and luxury, shaped by thoughtful spaces and the
               warmth of Vellore.
             </p>
-            <div className="mt-9 flex flex-wrap gap-3">
+            <div className="mt-9 flex flex-wrap gap-5">
               <a href="#welcome" className="luxury-button-ghost px-6 py-3 text-cream">
                 Explore the hotel
               </a>
@@ -178,7 +178,7 @@ export function AboutUs() {
           </div>
         </section>
         <section className="about-section about-story" id="welcome">
-          <div className="about-story-grid">
+          <div className="about-story-grid about-story-intro">
             <div>
               <h2 className="about-title about-story-title">
                 <span>A considered stay,</span>
@@ -197,9 +197,6 @@ export function AboutUs() {
                 amidst the scenic foothills, providing guests with an oasis of tranquillity while
                 keeping the city&apos;s important destinations within easy reach.
               </p>
-              <a href="#contact" className="text-link">
-                Discover our address
-              </a>
             </div>
           </div>
           <div className="about-image-strip">
@@ -210,7 +207,7 @@ export function AboutUs() {
             />
             <div>
               <span className="eyebrow">Vellore · Tamil Nadu</span>
-              <p className="mt-2 font-display text-3xl text-gold">
+              <p className="mt-2 font-display text-3xl text-white">
                 A quiet landmark on the highway.
               </p>
             </div>

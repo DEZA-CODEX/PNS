@@ -20,7 +20,7 @@ export const roomCategories: Room[] = [
       "Our Vajra Premium Rooms are designed to provide a serene and sophisticated environment for our guests.",
     amenities: [
       "Centralized air conditioning",
-      "32” LED TV with DTH connection",
+      "32” LED TV",
       "Mini fridge",
       "In-room dining service",
     ],
@@ -36,8 +36,7 @@ export const roomCategories: Room[] = [
       "Our Garuda Luxury Rooms offer a blend of opulence and comfort, perfect for guests seeking a more spacious and luxurious experience.",
     amenities: [
       "Centralized air conditioning",
-      "32” LED TV with DTH connection",
-      "Hot water kettle with tea/coffee maker",
+      "32” LED TV ",
       "24-hour hot water shower",
       "Electronic safety locker",
     ],
@@ -53,9 +52,9 @@ export const roomCategories: Room[] = [
       "The Arohana Balcony Rooms are designed for guests who appreciate the beauty of nature and desire a tranquil retreat.",
     amenities: [
       "Centralized air conditioning",
-      "32” LED TV with DTH connection",
+      "32” LED TV",
       "Office desk and chair",
-      "Complimentary high-speed Wi-Fi",
+      "high-speed Wi-Fi",
     ],
     price: "₹5,100",
     tax: "5% GST",
@@ -87,7 +86,7 @@ export const roomCategories: Room[] = [
       "Electronic safety locker",
       "Office desk and chair",
       "Centralized air conditioning",
-      "43” LED TV with DTH connection",
+      "43” LED TV",
     ],
     price: "₹6,700",
     tax: "5% GST",
@@ -97,8 +96,8 @@ export const roomCategories: Room[] = [
 
 export const comparisonAmenities = [
   "Centralized air conditioning",
-  "LED TV with DTH connection",
-  "Complimentary high-speed Wi-Fi",
+  "LED TV",
+  " high-speed Wi-Fi",
   "Mini fridge",
   "In-room dining service",
   "Electronic safety locker",
